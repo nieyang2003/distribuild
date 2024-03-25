@@ -1,10 +1,20 @@
-#ifndef DISTRIBUILD_COMMON_LOGGING_H_
-#define DISTRIBUILD_COMMON_LOGGING_H_
+/**
+ * @file logging.h
+ * @author nieyang (nieyang2003@qq.com)
+ * @brief 日志相关宏
+ * @version 0.1
+ * @date 2024-03-25
+ * 
+ * 
+ */
+
+#ifndef __DISTBU_COMMON_LOGGING_H__
+#define __DISTBU_COMMON_LOGGING_H__
 
 #include <fmt/format.h>
 #include <stdarg.h>
 
-namespace distribuild {
+namespace distbu {
 
 std::string GetNowTime();
 
@@ -19,37 +29,43 @@ std::string FormatLogOpt(const Ts&... args) noexcept {
 
 extern int min_log_level;
 
-} // namespace distribuild
+} // namespace distbu
 
-#define DISTRIBUILD_FORMAT_LOG(...) distribuild::FormatLogOpt(__VA_ARGS__).c_str()
+#define DISTBU_FORMAT_LOG(...) distbu::FormatLogOpt(__VA_ARGS__).c_str()
 
-#define DISTRIBUILD_LOG(level_str, level, ...)                      \
-    if (level >= distribuild::min_log_level) {                      \
+#define DISTBU_LOG(level_str, level, ...)                           \
+    if (level >= distbu::min_log_level) {                            \
         fprintf(stderr, "[%s]\t[%s]\t[%s:%d\t%s]\t%s\n",            \
-                distribuild::GetNowTime().c_str(), level_str,       \
+                distbu::GetNowTime().c_str(), level_str,             \
                 __FILE__, __LINE__, __func__,                       \
-                DISTRIBUILD_FORMAT_LOG(__VA_ARGS__));               \
+                DISTBU_FORMAT_LOG(__VA_ARGS__));                    \
     }
 
-#define LOG_DEBUG(...)  DISTRIBUILD_LOG("DEBUG", 0, __VA_ARGS__)
-#define LOG_TRACE(...)  DISTRIBUILD_LOG("TRACE", 1, __VA_ARGS__)
-#define LOG_INFO(...)   DISTRIBUILD_LOG("INFO",  2, __VA_ARGS__)
-#define LOG_WARN(...)   DISTRIBUILD_LOG("WARN",  3, __VA_ARGS__)
-#define LOG_ERROR(...)  DISTRIBUILD_LOG("ERROR", 4, __VA_ARGS__)
+#define LOG_DEBUG(...)  DISTBU_LOG("DEBUG", 0, __VA_ARGS__)
+#define LOG_TRACE(...)  DISTBU_LOG("TRACE", 1, __VA_ARGS__)
+#define LOG_INFO(...)   DISTBU_LOG("INFO",  2, __VA_ARGS__)
+#define LOG_WARN(...)   DISTBU_LOG("WARN",  3, __VA_ARGS__)
+#define LOG_ERROR(...)  DISTBU_LOG("ERROR", 4, __VA_ARGS__)
 #define LOG_FATAL(...)                                              \
     do {                                                            \
-        DISTRIBUILD_LOG("FATAL", 5, __VA_ARGS__);            \
+        DISTBU_LOG("FATAL", 5, __VA_ARGS__);                        \
         abort();                                                    \
     } while(0)
 
-#define DISTRIBUILD_ASSERT(expr, ...)                               \
-    do{                                                             \
+#define DISTBU_ASSERT(expr, ...)                                    \
+    do {                                                            \
         if (!(expr)) {                                              \
             LOG_FATAL("{}", fmt::format("Assert [{}] {}", #expr,    \
-                      DISTRIBUILD_FORMAT_LOG(__VA_ARGS__)));        \
+                      DISTBU_FORMAT_LOG(__VA_ARGS__)));             \
         }                                                           \
     } while(0)
 
-
+#define DISTBU_CHECK(expr, ...)                                     \
+    do {                                                            \
+        if (!(expr)) {                                              \
+            LOG_FATAL("Check failed: , {}"#expr,                    \
+                    DISTBU_FORMAT_LOG(__VA_ARGS__));                \
+        }                                                           \
+    } while(0)
 
 #endif

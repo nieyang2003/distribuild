@@ -3,7 +3,7 @@
 #include <sys/time.h>
 #include <time.h>
 
-namespace distribuild {
+namespace distbu {
 
 std::string GetNowTime() {
     struct timeval tv;
