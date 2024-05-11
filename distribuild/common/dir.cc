@@ -7,11 +7,11 @@
 
 #include "distribuild/common/logging.h"
 
-namespace distbu {
+namespace distribuild {
 
 void MkDir(const std::string &path, mode_t mode) {
     std::string copy = path;
-    const char* dir = copy.data();
+    const char* dir = copy.c_str();
     for (size_t pos = copy.find('/', 0); pos != std::string::npos; pos = copy.find('/', pos + 1)) {
         copy[pos] = '\0';
         if (mkdir(dir, mode) == -1) {

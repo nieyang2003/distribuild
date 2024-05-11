@@ -7,19 +7,17 @@
  * 
  * 
  */
-#ifndef __DISTRIBUILD_COMMON_DIR_H__
-#define __DISTRIBUILD_COMMON_DIR_H__
+#pragma once
 #include <sys/types.h>
 
 #include <vector>
 #include <string>
 
 
-namespace distbu {
+namespace distribuild {
 
 void MkDir(const std::string& path, mode_t mode = 0755);
 void RemoveDir(const std::string& path);
 
-} // namespace distbu
+} // namespace distribuild
 
-#endif

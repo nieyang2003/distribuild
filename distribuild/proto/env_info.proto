@@ -1,0 +1,6 @@
+syntax = "proto3";
+package distribuild.scheduler;
+
+message EnviromentInfo {
+  string compiler_digest = 1;
+}

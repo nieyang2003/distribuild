@@ -7,29 +7,26 @@
  * 
  * 
  */
-#ifndef __DISTBU_CACHE_DISK_CACHE_H__
-#define __DISTBU_CACHE_DISK_CACHE_H__
-#include "cache_interface.h"
+#pragma once
+#include "cache.h"
 
-namespace distbu {
+namespace distribuild::cache {
 
 class Buffer;
 
-class DiskCache : public CacheInterface {
+class DiskCache : public Cache {
 public:
     DiskCache();
 
-    Buffer Get() override;
-    void Put(const std::string& key, const Buffer& buf) override;
-    void Clear() override;
+    Buffer get() override;
+    void put(const std::string& key, const Buffer& buf) override;
+    void clear() override;
 
     // ? 改用别的
-    std::vector<std::string> GetKeys() override;
+    std::vector<std::string> getKeys() override;
 
 private:
 
 };
 
-} // namespace distribuild
-
-#endif
+} // namespace distribuild::cache

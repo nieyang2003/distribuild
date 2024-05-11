@@ -7,9 +7,7 @@
  * 
  * 
  */
-
-#ifndef __DISTBU_COMMON_LOGGING_H__
-#define __DISTBU_COMMON_LOGGING_H__
+#pragma once
 
 #include <fmt/format.h>
 #include <stdarg.h>
@@ -68,4 +66,3 @@ extern int min_log_level;
         }                                                           \
     } while(0)
 
-#endif

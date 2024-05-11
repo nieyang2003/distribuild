@@ -1,0 +1,154 @@
+syntax = "proto3";
+package distribuild.scheduler;
+
+import "env_info.proto";
+
+// 状态
+enum Status {
+  STATUS_UNKNOWN = 0;
+  STATUS_NO_QUATA_AVAILABLE = 1001;
+}
+
+// 节点优先级
+enum ServantPriority {
+  SERVANT_PRIORITY_UNKNOWN   = 0;
+  SERVANT_PRIORITY_USER      = 1;
+  SERVANT_PRIORITY_DEDICATED = 2;
+}
+
+// 新分配任务
+message StartingTaskGrant {
+  uint64 task_grant_id = 1;
+  string servant_location = 2;
+}
+
+// 拒绝调度器分配任务的原因
+enum RejectTaskReason {
+  REJECT_TASK_REASON_UNKNOWN = 0;
+  REJECT_TASK_REASON_POOR    = 1;
+}
+
+// --------------------------------------------------------- //
+// HeartBeat
+
+// 心跳请求
+message HeartBeatRequest {
+  string token = 13;                        // 访问调度器的令牌
+  uint32 next_heart_beat_in_ms = 1;         // 下次心跳的超时时间
+  uint32 version = 2;                       // daemon版本
+  string reported_location = 3;             // 报告地址
+  uint32 current_load = 4;                  // 当前负载
+  ServantPriority servant_priority = 5;     // 赋予节点时的优先级
+  uint32 threads = 7;                       // 可以提供的最大并发任务数
+  uint32 not_accepting_reason = 6;          // 为什么没有并发
+  uint32 total_memory_in_bytes = 8;         // 内存总大小
+  uint32 memory_available_in_bytes = 9;     // 可用内存大小
+  repeated EnviromentInfo env_infos = 10;   // 可用编译器列表
+  repeated RunningTask running_tasks = 11;  // 正在执行的任务列表
+}
+
+// 心跳响应
+message HeartBeatResponse {
+  repeated string tokens = 2;
+  repeated uint64 expired_tasks = 1 [packed = true];
+}
+
+// --------------------------------------------------------- //
+// GetConfig
+
+// 获取配置请求
+message GetConfigRequest {
+  string token = 1;
+}
+
+// 获取配置响应
+message GetConfigResponse {
+  string daemon_token = 1;   // 访问Daemon的令牌
+}
+
+// --------------------------------------------------------- //
+// WaitForStaringTask
+
+// 等待任务请求
+message WaitForStaringTaskRequest {
+  string token                 = 10;   // 访问daemon的令牌
+  uint32 mills_to_wait         = 1;    // 
+  EnviromentInfo env_info      = 2;    // 
+  uint32 immeadiate_reqs       = 3;    // 
+  uint32 prefetch_reqs         = 4;    // 
+  uint32 next_keep_alive_in_ms = 5;    // 应该调用KeepAlive的时间段
+  int32  min_version           = 6;    // daemon最小版本
+}
+
+// 等待任务响应
+message WaitForStaringTaskReponse {
+  repeated StartingTaskGrant grants = 1;
+}
+
+// --------------------------------------------------------- //
+// KeepTaskAlive
+
+// From Client
+message KeepTaskAliveRequest {
+  string token = 10;
+  repeated uint64 task_grant_ids = 1 [packed = true];
+  uint32 next_keep_alive_in_ms   = 2;
+}
+
+// From Scheduler
+message KeepTaskAliveResponse {
+  repeated bool statues = 1 [packed = true];
+}
+
+// --------------------------------------------------------- //
+// FreeTask
+
+// RPC请求：
+message FreeTaskRequst {
+  string token = 2;
+  repeated uint64 task_grant_ids = 1 [packed = true];
+  // 选项 [packed = true] 用于指示编码器将字段以紧凑格式编码。这意味着在序列化消息时，整个列表将作为一个单独的字段进行编码，以减少序列化后的消息大小。
+}
+
+// RPC响应：
+message FreeTaskResponse {} // 空
+
+// --------------------------------------------------------- //
+// GetRunningTask
+
+// 正在执行的任务
+message RunningTask {
+  uint64 servant_task_id  = 1;
+  uint64 task_grant_id    = 2;
+  string servant_location = 3;
+  string task_digest      = 4;
+}
+
+// RPC请求：获取正在执行的任务
+message GetRunningTasksRequest {} // 空
+
+// RPC响应：返回正在执行的任务
+message GetRunningTasksResponse {
+  repeated RunningTask running_tasks = 1;
+}
+
+// --------------------------------------------------------- //
+
+service SchedulerService {
+  // 编译机调用，返回自己的状态
+  rpc HeartBeat(HeartBeatRequest) returns (HeartBeatResponse);
+
+  // 用于定期获取配置信息
+  rpc GetConfig(GetConfigRequest) returns (GetConfigResponse);
+
+  // 申请编译任务，分发编译节点
+  rpc WaitForStaringTask(WaitForStaringTaskRequest) returns (WaitForStaringTaskReponse);
+
+  // 
+  rpc KeepTaskAlive(KeepTaskAliveRequest) returns (KeepTaskAliveResponse);
+
+  // 
+  rpc FreeTask(FreeTaskRequst) returns (FreeTaskResponse);
+
+  rpc GetRunningTasks(GetRunningTasksRequest) returns (GetRunningTasksResponse);
+}

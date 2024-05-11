@@ -1,0 +1,12 @@
+syntax = "proto3";
+package distribuild.patch;
+
+message Location {
+  uint32 position = 1;
+  uint32 total_size = 2;
+  uint32 suffix = 3;
+}
+
+message Locations {
+  repeated Location locations = 1;
+}
