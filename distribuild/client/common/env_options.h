@@ -2,10 +2,12 @@
 
 namespace distribuild::client {
 
-enum class CacheStatus {
+enum class CacheControl {
   Disallow = 0,
   Allow    = 1,
   Refill   = 2,
 };
+
+CacheControl GetCacheControlEnv();
 
 }

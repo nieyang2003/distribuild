@@ -40,6 +40,9 @@ find_package(jsoncpp REQUIRED)
 find_package(OpenSSL REQUIRED)
 find_package(protobuf REQUIRED)
 find_package(gRPC REQUIRED)
+find_package(Zstd REQUIRED)
+find_package(Blake3 REQUIRED)
+
 
 set(LIBS
     distribuild

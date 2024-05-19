@@ -4,6 +4,8 @@
 #include <unordered_set>
 #include <string_view>
 
+#include "distribuild/common/string.h"
+
 namespace distribuild::client {
 
 namespace {
@@ -108,11 +110,70 @@ const std::unordered_set<std::string_view> kOneValueArguments = {
     "--include-with-prefix-before",
     "-iwithsysroot"};
 
+/// @brief 转义字符串中的特殊字符，以便在命令行参数中安全使用
+std::string EscapeCommandArgument(const std::string_view& str) {
+  std::string result;
+  for (size_t i = 0; i < str.size(); ++i) {
+    switch (str[i]) {
+      case '\a':
+        result += "\\a";
+        break;
+      case '\b':
+        result += "\\b";
+        break;
+      case '\f':
+        result += "\\f";
+        break;
+      case '\n':
+        result += "\\n";
+        break;
+      case '\r':
+        result += "\\r";
+        break;
+      case '\t':
+        result += "\\t";
+        break;
+      case '\v':
+        result += "\\v";
+        break;
+      case ' ':
+      case '>':
+      case '<':
+      case '!':
+      case '"':
+      case '#':
+      case '$':
+      case '&':
+      case '(':
+      case ')':
+      case '*':
+      case ',':
+      case ':':
+      case ';':
+      case '?':
+      case '@':
+      case '[':
+      case '\\':
+      case ']':
+      case '`':
+      case '{':
+      case '}':
+        result += '\\';
+        [[fallthrough]];
+      default:
+        result += str[i];
+        break;
+    }
+  }
+  return result;
+}
+
 }  // namespace
 
 CompilerArgs::CompilerArgs(int argc, const char** argv) {
   DISTBU_CHECK(argc >= 1); // 参数在传入前已经处理
   
+  // 编译选项与文件
   for (int i = 0; i < argc; ++i) {
 	if (kOneValueArguments.count(argv[i])) {
 	  args_.emplace_back(argv[i], OptionArgs(&argv[i + 1], 1));
@@ -125,6 +186,70 @@ CompilerArgs::CompilerArgs(int argc, const char** argv) {
 	  }
 	}
   }
+  
+  // 记录原命令
+  for (int i = 0; i != argc; ++i) {
+    rebuilt_arg_ += EscapeCommandArgument(argv[i]) + " ";
+  }
+  rebuilt_arg_.pop_back();  // 弹出多余空格
 }
 
+const CompilerArgs::OptionArgs* CompilerArgs::TryGet(const std::string_view& key) const {
+  for (auto&& [k, v] : args_) {
+	if (k == key) {
+	  return &v;
+	}
+  }
+  return nullptr;
+}
+
+std::string CompilerArgs::GetOutputFile() const {
+  if (auto opt = TryGet("-o")) {
+	return opt->front();
+  } else {
+	DISTBU_CHECK(GetFilenames().size() == 1);
+	std::string_view filename = GetFilenames()[0];
+    auto path = filename.substr(0, filename.find_last_of('.'));
+    if (auto pos = path.find_last_of('/')) {
+      path = path.substr(pos + 1);
+    }
+    return std::string(path) + ".o";
+  }
+}
+
+RewrittenArgs CompilerArgs::Rewrite(
+    const std::unordered_set<std::string_view>& remove,
+    const std::vector<std::string_view>& remove_prefix,
+    const std::initializer_list<std::string_view>& add, bool keep_filenames) const {
+  std::vector<std::string> result;
+  for (auto&& [k, v] : args_) {
+	// 完全匹配筛选
+	if (remove.count(k)) continue;
+    // 前缀匹配筛选
+	bool skip = false;
+	for (auto&& e : remove_prefix) {
+	  if (StartWith(k, e)) {
+		skip = true;
+		break;
+	  }
+	}
+	if (skip) continue;
+    // 添加
+	result.push_back(k);
+	for (auto&& e : v) {
+		result.push_back(e);
+	}
+  }
+  // 添加
+  for (auto&& e : add) {
+	result.push_back(std::string(e));
+  }
+  // 文件
+  if (keep_filenames) {
+	for (auto&& e : filenames_) {
+      result.push_back(e);
+    }
+  }
+  return RewrittenArgs(compiler_, result);
+}
 }
