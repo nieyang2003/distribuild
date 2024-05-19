@@ -17,7 +17,7 @@ using namespace std::literals;
 /// @brief 根据参数判断是否可以在远程执行
 bool IsDistributable(const CompilerArgs& args) {
   if (!args.TryGet("-c")) {
-	LOG_TRACE("不可用选项 '-c'，退出");
+	LOG_TRACE("不可用选项 '-c'，退出"); // 重写后删去
 	return false;
   }
   // TODO
@@ -27,12 +27,16 @@ bool IsDistributable(const CompilerArgs& args) {
 /// @brief 根据参数判断是否为轻量级任务
 bool IsLightweight(const CompilerArgs& args) {
   static constexpr std::string_view kLightweightArgs[] = {"-dumpversion", "-dumpmachine", "-E"};
+  // -dumpversion: 打印出 GCC 的版本号
+  // -dumpmachine: 打印出目标机器的信息
+  // -E: 只进行预处理
 
   for (auto&& e : kLightweightArgs) {
 	if (args.TryGet(e)) {
 	  return true;
 	}
   }
+  
   return false;
 }
 
@@ -65,10 +69,12 @@ int Compile(int argc, const char* argv[]) {
   // 找到实际编译器绝对路径
   if (use_this && argv[1][0] == '/') {
 	// distribuild /usr/bin/.../g++ 
-    args.SetCompiler(argv[1]); // 使用了绝对路径
+    args.SetCompiler(argv[1]); // 直接使用了绝对路径
   } else {
+	// 找到绝对路径
     args.SetCompiler(FindExecutableInPath(GetBaseName(argv[skip - 1]), [](auto&& path) {
-		return !EndWith(path, "ccache");
+		return !EndWith(path, "ccache") &&
+		       !EndWith(path, "distcc");
 	}));
   }
   LOG_TRACE("使用编译器: {}", args.GetCompiler());
@@ -96,7 +102,7 @@ int Compile(int argc, const char* argv[]) {
 
   // 编译缓存
   if (rewritten->cache_control == CacheControl::Disallow
-      && GetCacheControlEnv() != CacheControl::Disallow) {  // 环境允许但重写结果不允许
+      && config::GetCacheControl() != CacheControl::Disallow) {  // 环境允许但重写结果不允许
 	LOG_WARN("存在不可缓存的文件。参数: {}", args.RebuiltArg());
   }
 
@@ -152,7 +158,9 @@ int main(int argc, char** argv) {
   // 环境
   setenv("LC_ALL", "en_US.utf8", true);
 
-  // 日志
+  // TODO: 日志
+
+  // 参数
   if (argc == 1) {
       LOG_INFO("没有编译任务，退出...");
       return 0;

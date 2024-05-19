@@ -8,7 +8,7 @@
 
 namespace distribuild::client {
 
-/// @brief 本地编译
+/// @brief 直接传递原始参数给编译器本地编译
 int CompileOnNative(const std::string& program, const char** argv);
 
 /// @brief 本地编译

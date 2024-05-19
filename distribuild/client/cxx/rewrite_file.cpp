@@ -75,7 +75,7 @@ std::optional<RewriteResult> RewriteFile(const CompilerArgs& args) {
   if (!language) {
 	return {};
   }
-  auto cache_control = GetCacheControlEnv();
+  auto cache_control = config::GetCacheControl();
   auto quota = AcquireTaskQuota(true);
 
   {

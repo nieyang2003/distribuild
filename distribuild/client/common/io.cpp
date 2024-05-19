@@ -4,6 +4,10 @@
 
 #include <fstream>
 #include <fcntl.h>
+#include <poll.h>
+#include <algorithm>
+
+using namespace std::literals;
 
 namespace distribuild::client {
 
@@ -37,6 +41,16 @@ void WriteAll(const std::string& filename, const std::string_view& data) {
 void SetNonblocking(int fd) {
   int flags = fcntl(fd, F_GETFL, 0);
   DISTBU_CHECK(fcntl(fd, F_SETFL, flags | O_NONBLOCK) == 0);
+}
+
+bool WaitForEvent(int fd, int event, std::chrono::steady_clock::time_point timeout_tp) {
+  pollfd fds;
+  fds.fd = fd;
+  fds.events = event;
+  auto result = poll(&fds, 1, std::max(0ns,
+      (timeout_tp - std::chrono::steady_clock::now())) / 1ms); // 确保>=0
+  DISTBU_CHECK(result > 0);
+  return result == 1;
 }
 
 }

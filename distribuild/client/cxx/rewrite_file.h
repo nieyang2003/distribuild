@@ -4,7 +4,7 @@
 #include <optional>
 
 #include "compiler_args.h"
-#include "common/env_options.h"
+#include "common/config.h"
 
 namespace distribuild::client {
   
