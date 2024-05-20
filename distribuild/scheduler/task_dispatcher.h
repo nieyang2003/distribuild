@@ -20,7 +20,7 @@ enum class WaitStatus {
 
 // 任务信息
 struct TaskInfo {
-  EnviromentInfo use_env;  // 只能使用的编译器
+  EnviromentDesc use_env;  // 只能使用的编译器
 };
 
 /// @brief 任务分配情况
@@ -34,7 +34,7 @@ struct ServantInfo {
   int version;
   std::string observed_location;          // 
   std::string reported_location;          // 
-  std::vector<EnviromentInfo> enviroments;// 可用编译器
+  std::vector<EnviromentDesc> enviroments;// 可用编译器
   std::size_t num_cpu_cores;              // cpu核心数
   std::size_t current_load;               // 当前负载
   std::size_t total_memory;               // 总内存

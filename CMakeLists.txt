@@ -16,7 +16,7 @@ set(CMAKE_CXX_FLAGS "$ENV{CXXFLAGS} -rdynamic -O3 -fPIC -ggdb -std=c++2a -Wall -
 set(CMAKE_C_FLAGS "$ENV{CXXFLAGS} -rdynamic -O3 -fPIC -ggdb -std=c11 -Wall -Wno-deprecated -Werror -Wno-unused-function -Wno-builtin-macro-redefined -Wno-deprecated-declarations")
 
 # 设置搜索路径
-# include_directories(.)
+include_directories(distribuild)
 
 # 创建源码变量
 set(SRC_LIST)
@@ -40,8 +40,8 @@ find_package(jsoncpp REQUIRED)
 find_package(OpenSSL REQUIRED)
 find_package(protobuf REQUIRED)
 find_package(gRPC REQUIRED)
-find_package(Zstd REQUIRED)
-find_package(Blake3 REQUIRED)
+# find_package(Zstd REQUIRED)
+# find_package(Blake3 REQUIRED)
 
 
 set(LIBS

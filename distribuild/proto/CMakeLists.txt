@@ -1,8 +1,9 @@
 # 源文件
 set(PROTO_FILES
-  env_info.proto
+  env_desc.proto
   patch.proto
   scheduler.proto
+  daemon.proto
 )
 
 # 静态库

@@ -1,0 +1,7 @@
+syntax = "proto3";
+
+package distribuild;
+
+message EnviromentDesc {
+  string compiler_digest = 1;
+}

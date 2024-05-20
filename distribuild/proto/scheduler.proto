@@ -1,7 +1,7 @@
 syntax = "proto3";
 package distribuild.scheduler;
 
-import "env_info.proto";
+import "env_desc.proto";
 
 // 状态
 enum Status {
@@ -43,7 +43,7 @@ message HeartBeatRequest {
   uint32 not_accepting_reason = 6;          // 为什么没有并发
   uint32 total_memory_in_bytes = 8;         // 内存总大小
   uint32 memory_available_in_bytes = 9;     // 可用内存大小
-  repeated EnviromentInfo env_infos = 10;   // 可用编译器列表
+  repeated EnviromentDesc env_descs = 10;   // 可用编译器列表
   repeated RunningTask running_tasks = 11;  // 正在执行的任务列表
 }
 
@@ -73,7 +73,7 @@ message GetConfigResponse {
 message WaitForStaringTaskRequest {
   string token                 = 10;   // 访问daemon的令牌
   uint32 mills_to_wait         = 1;    // 
-  EnviromentInfo env_info      = 2;    // 
+  EnviromentDesc env_desc      = 2;    // 
   uint32 immeadiate_reqs       = 3;    // 
   uint32 prefetch_reqs         = 4;    // 
   uint32 next_keep_alive_in_ms = 5;    // 应该调用KeepAlive的时间段

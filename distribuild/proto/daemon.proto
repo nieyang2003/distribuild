@@ -1,0 +1,80 @@
+syntax = "proto3";
+package distribuild.daemon.cloud;
+
+import "env_desc.proto";
+
+enum Status {
+  STATUS_UNKNOWN        = 0;
+  STATUS_OVERLOAD       = 1;
+  STATUS_ACCESS_DENIED  = 2;
+  STATUS_TASK_NOT_FOUND = 3;
+  STATUS_INVALID_ARGS   = 4;
+}
+
+enum TaskStatus {
+  TASK_STATUS_UNKNOWN = 0;
+  TASK_STATUS_RUNNING = 1;
+  TASK_STATUS_DONE    = 2;
+  TASK_STATUS_FAILED  = 3;
+}
+
+// ----------------- QueueCxxTask ----------------- //
+
+message QueueCxxTaskRequest {
+  string token            = 1;
+  uint64 task_grant_id    = 2;
+  EnviromentDesc env_desc = 3;
+  string source_path      = 4;
+  string args             = 5;
+  uint32 compress_type    = 6;
+  bool disfill_cache      = 7;
+}
+
+message QueueCxxTaskResponse {
+  uint64 task_id = 1;
+}
+
+// ----------------- QueueCxxTask ----------------- //
+
+message AddTaskRefRequest {
+  string token   = 1;
+  uint64 task_id = 2;
+}
+
+message AddTaskRefResponse {}
+
+// ----------------- FreeTask ----------------- //
+
+message FreeTaskRequest {
+  string token   = 1;
+  uint64 task_id = 2;
+}
+
+message FreeTaskResponse {}
+
+// ----------------- QueueCxxTask ----------------- //
+
+message WaitForTaskRequest {
+  string token   = 1;
+  uint64 task_id = 2;
+  uint32 wait_ms = 3;
+  uint32 version = 5;
+  repeated uint32 acceptable_compress_types = 4;
+}
+
+message WaitForTaskResponse {
+  TaskStatus task_status   = 1;
+  int32      exit_code     = 2;
+  uint32     compress_type = 3;
+  bytes      err           = 4;
+  bytes      output        = 5;
+}
+
+// ----------------- DaemonService ----------------- //
+
+service DaemonService {
+  rpc QueueCxxTask(QueueCxxTaskRequest) returns (QueueCxxTaskResponse);
+  rpc AddTaskRef(AddTaskRefRequest) returns (AddTaskRefResponse);
+  rpc FreeTask(FreeTaskRequest) returns (FreeTaskResponse);
+  rpc WaitForTask(WaitForTaskRequest) returns (WaitForTaskResponse);
+}
