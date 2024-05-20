@@ -125,7 +125,8 @@ int Compile(int argc, const char* argv[]) {
 	  // 尝试重新提交
 	  if (retries--) {
 		LOG_TRACE("在云端编译失败, exit_code = {}, 重试", compile_result.exit_code);
-
+        
+		// TODO: 
 		if (rewritten = RewriteFile(args)) { // 被move所以重新生成
 		  continue;
 		}

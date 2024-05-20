@@ -14,7 +14,7 @@ struct RewriteResult {
   std::string  language;       // 语言
   std::string  source_path;    // 源路径
   std::string  zstd_rewritten; // zstd压缩后的源码
-  std::string  source_digest;  // 
+  std::string  source_digest;  // blake3生成的缓存键值
 };
 
 std::optional<RewriteResult> RewriteFile(const CompilerArgs& args);

@@ -111,6 +111,7 @@ std::optional<RewriteResult> RewriteFile(const CompilerArgs& args) {
 	LOG_TRACE("使用编译选项\"-fdirectives-only\"编译失败，再次尝试");
   }
 
+  // 重试，不使用"-fdirectives-only"
   {
 	RewrittenArgs cmd = args.Rewrite({"-c", "-o", "-fworking-directory"},
 	                                 {},

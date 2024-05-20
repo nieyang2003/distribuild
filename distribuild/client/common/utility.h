@@ -19,4 +19,10 @@ std::string GetRealPath(const std::string& name);
 std::string FindExecutableInPath(const std::string& executable,
 	const std::function<bool(const std::string& path)>& filter);
 
+/// @brief 获得文件修改时间和大小
+/// @param file 
+/// @return 
+std::pair<std::uint64_t, std::uint64_t>
+  GetFileModifytimeAndSize(const std::string& file);
+
 } // namespace distribuild::client

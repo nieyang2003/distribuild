@@ -3,6 +3,7 @@
 #include "distribuild/common/logging.h"
 #include "distribuild/client/common/multi_chunk.h"
 #include "distribuild/client/common/daemon_call.h"
+#include "distribuild/client/common/utility.h"
 
 #include "thirdparty/jsoncpp/include/json/json.h"
 
@@ -16,17 +17,19 @@ namespace distribuild::client {
 /// @return 
 std::optional<std::string> SubmitComileTask(const CompilerArgs& args, RewriteResult rewritten_source) {
   auto&& compiler = args.GetCompiler();
-
+  auto&& [mtime, size] = GetFileModifytimeAndSize(compiler);
   Json::Value task_req;
 
   task_req["requestor_process_id"] = getpid();
   task_req["source_path"] = rewritten_source.source_path;
   task_req["source_digest"] = rewritten_source.source_digest;
-  task_req["cache_control"] = static_cast<int>(rewritten_source.cache_status);
+  task_req["cache_control"] = static_cast<int>(rewritten_source.cache_control);
   task_req["compiler"]["path"] = compiler;
   task_req["compiler"]["size"] = static_cast<Json::UInt64>(size);
-  task_req["compiler"]["timestamp"] = static_cast<Json::UInt64>();
-  submit_task_req["compiler_invocation_arguments"] = ;
+  task_req["compiler"]["mtime"] = static_cast<Json::UInt64>(mtime);
+  
+  // 重写到云端
+  submit_task_req["compiler_invocation_arguments"] = args.Rewrite();
 
   /// 构造报文数据块
   std::vector<std::string_view> parts;
@@ -60,6 +63,7 @@ std::optional<std::string> SubmitComileTask(const CompilerArgs& args, RewriteRes
 }
 
 CompileResult WaitForCloudCompileResult(const CompilerArgs& args, const std::string task_id) {
+  // TODO:
   return CompileResult();
 }
 

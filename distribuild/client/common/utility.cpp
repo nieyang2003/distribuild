@@ -62,4 +62,11 @@ std::string distribuild::client::FindExecutableInPath(
   LOG_FATAL("Failed to find executable file '{}'", executable);
 }
 
+std::pair<std::uint64_t, std::uint64_t> GetFileModifytimeAndSize(
+    const std::string& file) {
+  struct stat result;
+  DISTBU_CHECK(lstat(file.c_str(), &result) == 0);
+  return std::pair(result.st_mtime, result.st_size);
+}
+
 }
