@@ -1,0 +1,56 @@
+syntax = "proto3";
+package distribuild.cache;
+
+// ----------------- TryGetEntry ----------------- //
+
+message TryGetEntryRequest {
+  string token = 2;
+  string key   = 1;
+}
+
+message TryGetEntryResponse {
+  // 如果命中，则放在元数据中返回
+}
+
+// ----------------- PutEntry ----------------- //
+
+message PutEntryRequest {
+  string token = 2;
+  string key   = 1;
+  // 放在元数据中
+}
+  
+message PutEntryResponse {
+  // nothing
+}
+
+// ----------------- FetchBloomFilter ----------------- //
+
+message FetchBloomFilterRequest {
+  // 请求者token
+  string token = 3;
+  // 上次获取`整个`布隆过滤器以来经过的秒数
+  uint32 secs_last_full_fetch = 1;
+  // 上次获取布隆过滤器以来经过的秒数
+  uint32 secs_last_fetch = 2;
+}
+
+message FetchBloomFilterResponse {
+  // 如果设置，则提供新键列表，否则返回整个布隆过滤器
+  bool incremental = 1;
+  // 新填充缓存条目的键列表
+  repeated string newly_populated_keys = 2;
+  // 为每个键生成的哈希值数量
+  uint32 num_hashes = 3;
+}
+
+// ----------------- CacheService ----------------- //
+
+service CacheService {
+  // 获得缓存
+  rpc TryGetEntry(TryGetEntryRequest) returns (TryGetEntryResponse);
+  // 获得缓存
+  rpc PutEntry(PutEntryRequest) returns (PutEntryResponse);
+  // 向缓存服务器请求布隆过滤器内容
+  rpc FetchBloomFilter(FetchBloomFilterRequest) returns (FetchBloomFilterResponse);
+}

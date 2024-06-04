@@ -9,7 +9,7 @@
 
 using namespace std::literals;
 
-namespace distribuild::client {
+namespace distribuild {
 
 std::ptrdiff_t WriteTo(int fd, const std::string_view& data, std::size_t start) {
   DISTBU_CHECK(start < data.size());

@@ -1,0 +1,47 @@
+syntax = "proto3";
+import "file_desc.proto";
+package distribuild.http_service;
+
+// --------------------------------------------------------- //
+// SubmitCxxTask
+
+message SubmitCxxTaskRequest {
+  int32    requestor_pid  = 1;
+  string   source_path    = 2;
+  string   source_digest  = 3;
+  string   compiler_args  = 4;
+  int32    cache_control  = 5;
+  FileDesc compiler       = 6;
+}
+
+message SubmitCxxTaskResponse {
+  uint64 task_id = 1;
+}
+
+// --------------------------------------------------------- //
+// WaitForCXXTask
+
+message WaitForCXXTaskRequest {
+  uint64 task_id    = 1;
+  uint32 ms_to_wait = 2;
+}
+
+message WaitForCXXTaskResponse {
+  int32 exit_code = 1;
+  string std_out  = 2;
+  string std_err  = 3;
+  repeated string file_extensions = 4;
+  repeated Locations patches      = 5;
+}
+
+// --------------------------------------------------------- //
+// SetFileDigest
+
+message SetFileDigestRequest {
+  FileDesc file_desc = 1;
+  string digest = 2;
+}
+
+message SetFileDigestResponse {
+  // nothing
+}

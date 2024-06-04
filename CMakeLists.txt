@@ -12,6 +12,7 @@ set(CMAKE_VERBOSE_MAKEFILE ON)
 
 # 设置C++编译器编译选项
 set(CMAKE_CXX_FLAGS "$ENV{CXXFLAGS} -rdynamic -O3 -fPIC -ggdb -std=c++2a -Wall -Wno-deprecated -Werror -Wno-unused-function -Wno-builtin-macro-redefined -Wno-deprecated-declarations")
+
 # 设置C编译编译选项
 set(CMAKE_C_FLAGS "$ENV{CXXFLAGS} -rdynamic -O3 -fPIC -ggdb -std=c11 -Wall -Wno-deprecated -Werror -Wno-unused-function -Wno-builtin-macro-redefined -Wno-deprecated-declarations")
 
@@ -40,9 +41,10 @@ find_package(jsoncpp REQUIRED)
 find_package(OpenSSL REQUIRED)
 find_package(protobuf REQUIRED)
 find_package(gRPC REQUIRED)
+find_package(Poco REQUIRED COMPONENTS Foundation Net Util)
 # find_package(Zstd REQUIRED)
 # find_package(Blake3 REQUIRED)
-
+# concurrencpp / PhotonLibOS
 
 set(LIBS
     distribuild
@@ -51,14 +53,10 @@ set(LIBS
     GTest::gtest
 )
 
-# 构建测试文件
-# option(BUILD_TEST "ON for complile test" ON)
-# if(BUILD_TEST)
-
-# add_executable(test_common "tests/common_test.cc")
-# target_link_libraries(test_common ${LIBS})
-
-# endif()
-
 add_subdirectory(distribuild)
+
+# 构建测试文件
+option(BUILD_TEST "ON for complile test" ON)
+if(BUILD_TEST)
 add_subdirectory(tests)
+endif()

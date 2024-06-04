@@ -1,6 +1,7 @@
 syntax = "proto3";
 package distribuild.daemon.cloud;
 
+import "google/protobuf/any.proto";
 import "env_desc.proto";
 
 enum Status {
@@ -12,22 +13,28 @@ enum Status {
 }
 
 enum TaskStatus {
-  TASK_STATUS_UNKNOWN = 0;
-  TASK_STATUS_RUNNING = 1;
-  TASK_STATUS_DONE    = 2;
-  TASK_STATUS_FAILED  = 3;
+  TASK_STATUS_UNKNOWN    = 0;
+  TASK_STATUS_RUNNING    = 1;
+  TASK_STATUS_DONE       = 2;
+  TASK_STATUS_FAILED     = 3;
+  TASK_STATUS_NOT_FOUND  = 4;
+}
+
+enum CompressType {
+  COMPRESS_TYPE_UNKNOWN = 0;
+  COMPRESS_TYPE_ZSTD    = 1;
 }
 
 // ----------------- QueueCxxTask ----------------- //
 
 message QueueCxxTaskRequest {
-  string token            = 1;
-  uint64 task_grant_id    = 2;
-  EnviromentDesc env_desc = 3;
-  string source_path      = 4;
-  string args             = 5;
-  uint32 compress_type    = 6;
-  bool disfill_cache      = 7;
+  string token                  = 1;
+  uint64 task_grant_id          = 2;
+  EnviromentDesc env_desc       = 3;
+  string source_path            = 4;
+  string args                   = 5;
+  CompressType compress_type    = 6;
+  bool disfill_cache            = 7;
 }
 
 message QueueCxxTaskResponse {
@@ -59,7 +66,7 @@ message WaitForTaskRequest {
   uint64 task_id = 2;
   uint32 wait_ms = 3;
   uint32 version = 5;
-  repeated uint32 acceptable_compress_types = 4;
+  repeated CompressType acceptable_compress_types = 4 [packed = true];
 }
 
 message WaitForTaskResponse {
@@ -68,6 +75,7 @@ message WaitForTaskResponse {
   uint32     compress_type = 3;
   bytes      err           = 4;
   bytes      output        = 5;
+  google.protobuf.Any extra_info = 7;
 }
 
 // ----------------- DaemonService ----------------- //

@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package distribuild;
 
+// 编译环境
 message EnviromentDesc {
   string compiler_digest = 1;
 }

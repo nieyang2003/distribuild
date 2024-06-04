@@ -1,0 +1,22 @@
+syntax = "proto3";
+package distribuild;
+
+message Location {
+  uint32 position = 1;
+  uint32 length   = 2;
+  uint32 suffix   = 3;
+}
+
+message Locations {
+  repeated Location locations = 1;
+}
+
+message FileDesc {
+  string path      = 1;
+  uint64 size      = 2;
+  uint64 timestamp = 3;
+}
+
+message CxxExtraInfo {
+  map<string, Locations> filename_infos = 10;
+}

@@ -1,9 +1,11 @@
 # 源文件
 set(PROTO_FILES
+  cache.proto
   env_desc.proto
-  patch.proto
-  scheduler.proto
+  file_desc.proto
   daemon.proto
+  http_service.proto
+  scheduler.proto
 )
 
 # 静态库

@@ -1,7 +1,7 @@
 syntax = "proto3";
-package distribuild.scheduler;
-
 import "env_desc.proto";
+import "file_desc.proto";
+package distribuild.scheduler;
 
 // 状态
 enum Status {
@@ -39,7 +39,7 @@ message HeartBeatRequest {
   string reported_location = 3;             // 报告地址
   uint32 current_load = 4;                  // 当前负载
   ServantPriority servant_priority = 5;     // 赋予节点时的优先级
-  uint32 threads = 7;                       // 可以提供的最大并发任务数
+  uint32 concurrency = 7;                   // 可以提供的最大并发任务数
   uint32 not_accepting_reason = 6;          // 为什么没有并发
   uint32 total_memory_in_bytes = 8;         // 内存总大小
   uint32 memory_available_in_bytes = 9;     // 可用内存大小

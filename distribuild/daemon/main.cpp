@@ -30,5 +30,5 @@ int StartServer(int argc, char** argv) {
 }
 
 int main(int argc, char** argv) {
-  
+  distribuild::daemon::StartServer(argc, argv);
 }

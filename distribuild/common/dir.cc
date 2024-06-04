@@ -4,8 +4,11 @@
 #include <sys/stat.h>
 #include <string.h>
 #include <unistd.h>
+#include <queue>
 
 #include "distribuild/common/logging.h"
+
+using namespace std::literals;
 
 namespace distribuild {
 
@@ -40,6 +43,53 @@ void RemoveDir(const std::string &path) {
         }
     }
     DISTBU_CHECK(rmdir(path.c_str()) == 0);
+}
+
+std::vector<DirNode> GetDirNodes(const std::string &path) {
+  std::unique_ptr<DIR, int(*)(DIR*)> dir(opendir(path.c_str()), &closedir);
+  std::vector<DirNode> result;
+
+  DISTBU_CHECK(dir != nullptr, "打开目录{}失败", path);
+  while (auto dir_ent = readdir(dir.get())) { // 遍历目录
+	if (dir_ent->d_name == "."sv || dir_ent->d_name == ".."sv) {
+	  continue;
+	}
+
+	auto type = dir_ent->d_type;
+	DirNode node = {
+      .name           = dir_ent->d_name,
+	  .inode          = dir_ent->d_ino,
+      .is_block_dev   = !!(type & DT_BLK),
+      .is_char_dev    = !!(type & DT_CHR),
+      .is_dir         = !!(type & DT_DIR),
+      .is_symlink     = !!(type & DT_LNK),
+      .is_regular     = !!(type & DT_REG),
+      .is_unix_socket = !!(type & DT_SOCK),
+	};
+    result.push_back(node);
+  }
+  return result;
+}
+
+std::vector<DirNode> GetDirNodesRecursively(const std::string &path) {
+  std::vector<DirNode> result;
+  std::queue<std::string> queue({""});
+
+  while (!queue.empty()) {
+	auto temp = GetDirNodes(path + "/" + queue.front());
+	if (!queue.front().empty()) {
+	  for (auto&& e : temp) {
+		e.name = queue.front() + "/" + e.name;
+	  }
+	}
+	queue.pop();
+	result.insert(result.end(), temp.begin(), temp.end());
+	for (auto&& e : temp) {
+	  if (e.is_dir) {
+	    queue.push(e.name);
+	  }
+	}
+  }
 }
 
 } // namespace distribuild

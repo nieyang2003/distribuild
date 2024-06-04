@@ -16,8 +16,22 @@
 
 namespace distribuild {
 
+struct DirNode {
+  std::string name;
+  std::uint64_t inode;
+  bool is_block_dev: 1;
+  bool is_char_dev: 1;
+  bool is_dir: 1;
+  bool is_symlink: 1;
+  bool is_regular: 1;
+  bool is_unix_socket: 1;
+};
+
 void MkDir(const std::string& path, mode_t mode = 0755);
 void RemoveDir(const std::string& path);
+
+std::vector<DirNode> GetDirNodes(const std::string& path);
+std::vector<DirNode> GetDirNodesRecursively(const std::string& path);
 
 } // namespace distribuild
 
