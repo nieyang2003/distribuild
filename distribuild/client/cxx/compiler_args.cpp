@@ -1,15 +1,14 @@
-#include "compiler_args.h"
-#include "logging.h"
-
+#include "client/cxx/compiler_args.h"
+#include "common/logging.h"
+#include "common/tools.h"
 #include <unordered_set>
 #include <string_view>
-
-#include "distribuild/common/string.h"
 
 namespace distribuild::client {
 
 namespace {
 
+/// @brief 后面紧跟参数的选项
 const std::unordered_set<std::string_view> kOneValueArguments = {
     "-o",
     "-x",
@@ -110,64 +109,6 @@ const std::unordered_set<std::string_view> kOneValueArguments = {
     "--include-with-prefix-before",
     "-iwithsysroot"};
 
-/// @brief 转义字符串中的特殊字符，以便在命令行参数中安全使用
-std::string EscapeCommandArgument(const std::string_view& str) {
-  std::string result;
-  for (size_t i = 0; i < str.size(); ++i) {
-    switch (str[i]) {
-      case '\a':
-        result += "\\a";
-        break;
-      case '\b':
-        result += "\\b";
-        break;
-      case '\f':
-        result += "\\f";
-        break;
-      case '\n':
-        result += "\\n";
-        break;
-      case '\r':
-        result += "\\r";
-        break;
-      case '\t':
-        result += "\\t";
-        break;
-      case '\v':
-        result += "\\v";
-        break;
-      case ' ':
-      case '>':
-      case '<':
-      case '!':
-      case '"':
-      case '#':
-      case '$':
-      case '&':
-      case '(':
-      case ')':
-      case '*':
-      case ',':
-      case ':':
-      case ';':
-      case '?':
-      case '@':
-      case '[':
-      case '\\':
-      case ']':
-      case '`':
-      case '{':
-      case '}':
-        result += '\\';
-        [[fallthrough]];
-      default:
-        result += str[i];
-        break;
-    }
-  }
-  return result;
-}
-
 }  // namespace
 
 CompilerArgs::CompilerArgs(int argc, const char** argv) {
@@ -207,8 +148,8 @@ std::string CompilerArgs::GetOutputFile() const {
   if (auto opt = TryGet("-o")) {
 	return opt->front();
   } else {
-	DISTBU_CHECK(GetFilenames().size() == 1);
-	std::string_view filename = GetFilenames()[0];
+	DISTBU_CHECK(filenames_.size() == 1);
+	std::string_view filename = filenames_[0];
     auto path = filename.substr(0, filename.find_last_of('.'));
     if (auto pos = path.find_last_of('/')) {
       path = path.substr(pos + 1);
@@ -252,4 +193,5 @@ RewrittenArgs CompilerArgs::Rewrite(
   }
   return RewrittenArgs(compiler_, result);
 }
+
 }

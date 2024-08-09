@@ -1,20 +1,9 @@
-/**
- * @file compiler_args.h
- * @author nieyang (nieyang2003@qq.com)
- * @brief 
- * @version 0.1
- * @date 2024-03-26
- * 
- * 
- */
 #pragma once
-
+#include "client/common/rewritten_args.h"
 #include <string>
 #include <vector>
 #include <span>
 #include <unordered_set>
-
-#include "distribuild/client/common/rewritten_args.h"
 
 namespace distribuild::client {
 
@@ -22,7 +11,7 @@ class CompilerArgs {
  public:
   using OptionArgs = std::span<const char*>;
 
-  /// @brief 解析编译器参数
+  /// @brief 构造函数，解析编译器参数
   CompilerArgs(int argc, const char** argv);
 
   /// @brief 尝试查找编译选项并返回
@@ -41,10 +30,13 @@ class CompilerArgs {
                         const std::vector<std::string_view>& remove_prefix,
 						const std::initializer_list<std::string_view>& add,
 						bool keep_filenames) const;
+  
+  /// @brief 返回命令行
+  /// @return 
+  std::string RebuiltArg() const { return compiler_ + " " + rebuilt_arg_; }
 
   const char* GetCompiler() const noexcept { return compiler_.c_str(); }
   void SetCompiler(std::string path) noexcept { compiler_ = std::move(path); }
-  std::string RebuiltArg() const { return compiler_ + " " + rebuilt_arg_; }
   const std::vector<const char*>& GetFilenames() const noexcept { return filenames_; }
   
 

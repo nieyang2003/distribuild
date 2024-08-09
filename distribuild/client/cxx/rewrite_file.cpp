@@ -1,11 +1,9 @@
-#include "rewrite_file.h"
-
-#include "distribuild/common/logging.h"
-#include "distribuild/common/string.h"
-
-#include "distribuild/client/common/task_quota.h"
-#include "distribuild/client/common/out_stream.h"
-#include "distribuild/client/common/command.h"
+#include "common/logging.h"
+#include "common/tools.h"
+#include "client/cxx/rewrite_file.h"
+#include "client/common/task_quota.h"
+#include "client/common/out_stream.h"
+#include "client/common/command.h"
 
 namespace distribuild::client {
 
@@ -61,19 +59,20 @@ TryRewriteFileWithCommandLine(const CompilerArgs& args, const RewrittenArgs& cmd
 
 	return std::tuple(zstd_os.GetResult(), cache_cntl, cache_key);
   }
-
+  
   // 执行失败
+  LOG_ERROR("\n{}", error);
   return std::nullopt;
 }
 
 } // namespace
 
 std::optional<RewriteResult> RewriteFile(const CompilerArgs& args) {
-  DISTBU_CHECK(args.GetFilenames().size() == 1, "只能有一个源文件");
+  DISTBU_CHECK_FORMAT(args.GetFilenames().size() == 1, "只能有一个源文件");
 
   auto language = DetermineLanguage(args); // 确定源代码语言
   if (!language) {
-	return {};
+	return std::nullopt;
   }
   auto cache_control = config::GetCacheControl();
   auto quota = AcquireTaskQuota(true);
@@ -98,7 +97,7 @@ std::optional<RewriteResult> RewriteFile(const CompilerArgs& args) {
 
 	auto opt = TryRewriteFileWithCommandLine(args, cmd, cache_control);
 	if (opt) {
-	  auto&& [rewritten, cache_cntl, digest] = *opt;
+	  auto&& [rewritten, cache_control, digest] = *opt;
       return RewriteResult{
 		.directives_only = true,
 		.cache_control = cache_control,
@@ -108,7 +107,7 @@ std::optional<RewriteResult> RewriteFile(const CompilerArgs& args) {
 		.source_digest = std::move(digest),
 	  };
 	}
-	LOG_TRACE("使用编译选项\"-fdirectives-only\"编译失败，再次尝试");
+	LOG_TRACE("使用编译选项\"-fdirectives-only\"重写编译参数失败，再次尝试");
   }
 
   // 重试，不使用"-fdirectives-only"

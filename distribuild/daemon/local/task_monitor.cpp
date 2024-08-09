@@ -1,10 +1,10 @@
-#include "task_monitor.h"
-
 #include <fstream>
 #include <sstream>
-
-#include "distribuild/common/logging.h"
-#include "distribuild/common/string.h"
+#include <functional>
+#include "daemon/config.h"
+#include "daemon/local/task_monitor.h"
+#include "common/logging.h"
+#include "common/tools.h"
 
 namespace distribuild::daemon::local {
 
@@ -12,7 +12,7 @@ namespace {
 
 bool IsAliveProc(pid_t pid) {
   std::ifstream ifs(fmt::format("/proc/{}/status", pid));
-  if (!ifs) return;
+  if (!ifs) return false;
 
   std::string str;
   while (std::getline(ifs, str)) {
@@ -38,6 +38,7 @@ bool IsAliveProc(pid_t pid) {
   }
 
   LOG_FATAL("未找到进程 {}", pid);
+  return false;
 }
 
 } // namespace
@@ -47,28 +48,34 @@ TaskMonitor* TaskMonitor::Instance() {
   return &instance;
 }
 
-TaskMonitor::TaskMonitor() {
-  // TODO: config
-  max_heavy_tasks_ = 10;
+TaskMonitor::TaskMonitor()
+  : timer_(0, 1'000) {
+  if (FLAGS_max_concurrency > 0) {
+	max_heavy_tasks_ = FLAGS_max_concurrency;
+  } else {
+	max_heavy_tasks_ = std::thread::hardware_concurrency();
+  }
   max_light_tasks_ = max_heavy_tasks_ * 1.5;
-  // TODO: 定时器：
+  
+  timer_.start(Poco::TimerCallback<TaskMonitor>(*this, &TaskMonitor::OnTimerCheckAliveProc));
 }
 
 TaskMonitor::~TaskMonitor() {
-  // TODO: 取消定时器
+  timer_.stop();
 }
 
-bool TaskMonitor::WaitForNewTask(pid_t pid, bool lightweight,
-                                 std::chrono::nanoseconds timeout) {
+bool TaskMonitor::WaitForNewTask(pid_t pid, bool lightweight, std::chrono::nanoseconds timeout) {
   // 增减当前任务数记录
   auto&& waiter = lightweight ? light_tasks_ : heavy_tasks_;
   waiter.fetch_add(1, std::memory_order_relaxed);
-  std::shared_ptr<void> deffer(nullptr, [&]{ waiter.fetch_sub(1, std::memory_order_relaxed); });
+  auto deffer = std::unique_ptr<void, std::function<void(void*)>>(nullptr, [&] (void*) {
+	waiter.fetch_sub(1, std::memory_order_relaxed);
+  });
 
   // 等待有任务释放
   std::unique_lock lock(permission_mutex_);
   auto success = permission_cv_.wait_for(lock, timeout, [&] {
-	// TODO: 当轻量级任务数过多时可能导致重量级任务持续无法进入而形成饥饿状态
+	// ! 当轻量级任务数过多时可能导致重量级任务持续无法进入而形成饥饿状态
     return permissions_granted_.size() < max_heavy_tasks_ + (lightweight ? max_light_tasks_ : 0);
   });
 
@@ -88,12 +95,13 @@ void TaskMonitor::DropTask(pid_t pid) {
 	std::scoped_lock lock(permission_mutex_);
 	if (permissions_granted_.erase(pid) == 0) [[unlikely]] {
 	  LOG_ERROR("删除未知的进程：{}", pid);
+	  return;
 	}
   }
   permission_cv_.notify_all();
 }
 
-void TaskMonitor::OnTimerCheckAliveProc(pid_t pid) {
+void TaskMonitor::OnTimerCheckAliveProc(Poco::Timer& timer) {
   std::scoped_lock lock(permission_mutex_);
   for (auto iter = permissions_granted_.begin(); iter != permissions_granted_.end(); ) {
 	if (!IsAliveProc(*iter)) {

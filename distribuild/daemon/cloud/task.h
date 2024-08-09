@@ -8,29 +8,28 @@
 
 namespace distribuild::daemon::cloud {
 
+/// @brief 任务基类
 class Task : public std::enable_shared_from_this<Task> {
  public:
-  virtual ~Task() = 0;
+  virtual ~Task() {};
   
   // 返回要执行的命令
   virtual std::string GetCmdLine() const = 0;
-  // 获取输入，只调用一次
-  virtual std::string GetStdInput() = 0;
+  // 获取输入，转移了所有权
+  virtual std::string GetSource() = 0;
   // 编译完成
-  virtual void OnCompleted(int exit_code, std::string std_out, std::string std_err) = 0;
+  virtual void OnCompleted(int exit_code, std::string&& std_out, std::string&& std_err) = 0;
 };
 
+/// @brief 编译任务基类
 class CompileTask : public Task {
  protected:
   struct Output {
-    std::vector<std::pair<std::string, std::string>> files;
+    std::vector<std::pair<std::string, std::string>> files; // 文件扩展名-内容
 	google::protobuf::Any extra_info;
   };
  public:
-  virtual ~CompileTask() = default;
-  virtual std::string GetCmdLine() const = 0;
-  virtual std::string GetStdInput() = 0;
-  virtual void OnCompleted(int exit_code, std::string std_out, std::string std_err) = 0;
+  virtual ~CompileTask() override = default;
   virtual std::optional<std::string> GetCacheKey() const = 0;
   virtual std::string GetDigest() const = 0;
   virtual int GetExitCode() const = 0;

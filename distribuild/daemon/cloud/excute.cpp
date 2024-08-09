@@ -1,14 +1,14 @@
-#include "excute.h"
-
-#include "distribuild/common/logging.h"
+#include <sys/syscall.h>
+#include <unistd.h>
+#include "daemon/cloud/excute.h"
+#include "common/logging.h"
 
 namespace distribuild::daemon::cloud {
 
-pid_t StartProgram(const std::string& cmd, int nice_level, int stdin_fd, int stdout_fd, int stderr_fd, int group) {
-  LOG_INFO("开始执行命令: {}", cmd);
+pid_t StartProgram(const std::string& cmd, int nice_level, int stdin_fd, int stdout_fd, int stderr_fd, bool in_group) {
   int pid = fork();
-  DISTBU_CHECK(pid >= 0, "无法创建子进程");
-  if (pid == 0) {
+  DISTBU_CHECK_FORMAT(pid >= 0, "创建子进程失败");
+  if (pid == 0) { // 子进程
 	// 重定向
 	dup2(stdin_fd,  STDIN_FILENO);
     dup2(stdout_fd, STDOUT_FILENO);
@@ -25,11 +25,11 @@ pid_t StartProgram(const std::string& cmd, int nice_level, int stdin_fd, int std
 
     // 优先级
 	if (nice_level) {
-      DISTBU_CHECK(nice(nice_level) != -1, "Failed to apply nice value [{}].", nice_level);
+      DISTBU_CHECK_FORMAT(nice(nice_level) != -1, "设置nice值失败：{}", nice_level);
     }
 
     // 设置进程组
-	if (group) {
+	if (in_group) {
       setpgid(0, 0);
     }
 
@@ -42,6 +42,7 @@ pid_t StartProgram(const std::string& cmd, int nice_level, int stdin_fd, int std
 	_exit(127);
   }
 
+  LOG_DEBUG("子进程 pid = {}", pid);
   return pid;
 }
 

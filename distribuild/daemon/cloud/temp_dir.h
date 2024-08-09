@@ -13,7 +13,7 @@ class TempDir {
 
   /// @brief 读取目录下包括递归子目录所有的文件
   /// @param subdir 子目录
-  /// @return <文件名，内容>数组
+  /// @return <文件路径，文件数据>数组
   std::vector<std::pair<std::string, std::string>> ReadAll(const std::string& subdir = "");
 
   /// @brief 删除自己
@@ -27,6 +27,8 @@ class TempDir {
   std::string path_;
 };
 
+/// @brief 获取缓存目录位置，用于生产缓存文件
+/// @return 
 const std::string& GetTempDir();
 
 } // namespace distribuild::daemon::cloud

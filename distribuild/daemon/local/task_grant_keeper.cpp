@@ -1,33 +1,39 @@
-#include "task_grant_keeper.h"
-
 #include <grpc/grpc.h>
 #include <grpcpp/grpcpp.h>
+#include <Poco/Thread.h>
 #include <grpcpp/create_channel.h>
-
-#include "distribuild/common/logging.h"
+#include <Poco/ThreadPool.h>
+#include <Poco/TaskManager.h>
+#include "daemon/local/task_grant_keeper.h"
+#include "common/logging.h"
+#include "common/tools.h"
+#include "daemon/config.h"
+#include "daemon/version.h"
 
 using namespace std::literals;
 
 namespace distribuild::daemon::local {
 
-TaskGrantKeeper::TaskGrantKeeper() {
-  auto channel = grpc::CreateChannel("127.0.0.1:10000", grpc::InsecureChannelCredentials());
-  auto scheduler_stub_ = scheduler::SchedulerService::NewStub(channel);
+TaskGrantKeeper::TaskGrantKeeper()
+  : task_manager_(Poco::ThreadPool::defaultPool()) {
+  auto channel = grpc::CreateChannel(FLAGS_scheduler_location, grpc::InsecureChannelCredentials());
+  scheduler_stub_ = scheduler::SchedulerService::NewStub(channel);
   DISTBU_CHECK(scheduler_stub_);
 }
 
-std::optional<TaskGrantKeeper::GrantDesc> TaskGrantKeeper::Get(
-    const EnviromentDesc& desc, const std::chrono::nanoseconds& timeout) {
+std::optional<TaskGrantKeeper::GrantDesc> TaskGrantKeeper::Get(const EnviromentDesc& desc, const std::chrono::nanoseconds& timeout) {
   // 获得keeper
-  EnvGrantKeeper* keeper;
+  EnvGrantKeeper* keeper = nullptr;
   {
 	std::scoped_lock lock(mutex_);
     auto&& new_keeper = keepers_[desc.compiler_digest()];
 	if (!new_keeper) {
 	  new_keeper = std::make_unique<EnvGrantKeeper>();
 	  new_keeper->env_desc = desc;
-	  keeper = new_keeper.get();
+	  new_keeper->task = new GrantFetcherPocoTask(this, new_keeper.get());
+	  task_manager_.start(new_keeper->task);
 	}
+	keeper = new_keeper.get();
   }
 
   // 丢弃过期的授权
@@ -43,16 +49,17 @@ std::optional<TaskGrantKeeper::GrantDesc> TaskGrantKeeper::Get(
     return result;
   }
 
-  ++keeper->waiters; // ! 是否要加锁
+  ++keeper->waiters;
 
-  // 通知协程去申请grant
+  // 通知任务去申请grant
   keeper->need_more_cv.notify_all();
   if (!keeper->available_cv.wait_for(lock, timeout, [&] { return !keeper->remaining.empty(); })) {
 	DISTBU_CHECK(--keeper->waiters == 0);
-    return {}; // 申请失败
+    return std::nullopt; // 申请失败
   }
 
   // 申请成功
+  LOG_DEBUG("申请成功");
   auto result = keeper->remaining.front();
   keeper->remaining.pop();
   DISTBU_CHECK(--keeper->waiters == 0);
@@ -61,15 +68,13 @@ std::optional<TaskGrantKeeper::GrantDesc> TaskGrantKeeper::Get(
 
 void TaskGrantKeeper::Free(std::uint64_t grant_id) {
   grpc::ClientContext context;
-  context.set_deadline(std::chrono::system_clock::now() + 5s);
-
   scheduler::FreeTaskRequst req;
-  req.set_token("123456");
+  req.set_token(FLAGS_scheduler_token);
   req.add_task_grant_ids(grant_id);
+  SetTimeout(&context, 5s);
 
   grpc::CompletionQueue cq;
 
-  // TODO: 设置异步等待结果函数
   // !
   scheduler_stub_->AsyncFreeTask(&context, req, &cq);
 }
@@ -83,12 +88,13 @@ void TaskGrantKeeper::Stop() {
 }
 
 void TaskGrantKeeper::Join() {
-  for (auto&& [compiler_digest, keeper] : keepers_) {
-	// TODO: 回收所有协程
+  for (auto&& [_, keeper] : keepers_) {
+    keeper->task->cancel();
   }
 }
 
 void TaskGrantKeeper::GrantFetcherProc(EnvGrantKeeper* keeper) {
+  LOG_DEBUG("开始FetcherProcTask");
   constexpr auto kMaxWait = 5s;
   constexpr auto kNetworkDelayTolerance = 5s;
   constexpr auto kExpiresIn = 15s;
@@ -105,37 +111,36 @@ void TaskGrantKeeper::GrantFetcherProc(EnvGrantKeeper* keeper) {
 	  break;
 	}
 
-	auto now = std::chrono::steady_clock::now();
 	grpc::ClientContext context;
 	scheduler::WaitForStaringTaskRequest req;
-	scheduler::WaitForStaringTaskReponse res;
+	scheduler::WaitForStaringTaskReponse resp;
     
-	context.set_deadline(now + kMaxWait + 5s);
-	req.set_token("123456");
+	SetTimeout(&context, 5s + kMaxWait);
+	req.set_token(FLAGS_scheduler_token);
     req.set_mills_to_wait(kMaxWait / 1ms);
     req.set_next_keep_alive_in_ms(kExpiresIn / 1ms);
     *req.mutable_env_desc() = keeper->env_desc;
     req.set_immeadiate_reqs(keeper->waiters);
     req.set_prefetch_reqs(1);
-    req.set_min_version(1);
+    req.set_min_version(DISTRIBUILD_VERSION);
     
 	lock.unlock();
-	auto result = scheduler_stub_->WaitForStaringTask(&context, req, &res); // 阻塞调用，不加锁
+	auto status = scheduler_stub_->WaitForStaringTask(&context, req, &resp); // 阻塞调用，不加锁
 	lock.lock();
 
-	if (result.ok()) {
+	if (status.ok()) {
 	  // 存储授权信息
-	  for (int i = 0; i < res.grants_size(); ++i) {
+	  for (int i = 0; i < resp.grants_size(); ++i) {
         keeper->remaining.push(GrantDesc{
-		  .expire_tp = now + kMaxWait - kNetworkDelayTolerance,
-		  .grant_id = res.grants(i).task_grant_id(),
-		  .servant_location = res.grants(i).servant_location(),
+		  .expire_tp = std::chrono::steady_clock::now() + kMaxWait - kNetworkDelayTolerance,
+		  .grant_id = resp.grants(i).task_grant_id(),
+		  .servant_location = resp.grants(i).servant_location(),
 		});
 	  }
 	  keeper->available_cv.notify_all(); // 通知已经获得授权
 	} else {
-	  LOG_WARN("启动任务失败，错误信息：", result.error_details());
-	  // TODO: 等待100ms
+	  LOG_WARN("启动任务失败，错误信息：{}", status.error_message());
+	  Poco::Thread::sleep(100);
 	}
   }
 }

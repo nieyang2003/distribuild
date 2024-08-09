@@ -3,9 +3,9 @@
 #include <string>
 #include <optional>
 #include <memory>
-
-#include "scheduler.grpc.pb.h"
-#include "scheduler.pb.h"
+#include <Poco/Timer.h>
+#include "../build/distribuild/proto/scheduler.grpc.pb.h"
+#include "../build/distribuild/proto/scheduler.pb.h"
 
 namespace distribuild::daemon::local {
 
@@ -21,21 +21,20 @@ class TaskRunKeeper {
   ~TaskRunKeeper();
   
   /// @brief 查找运行的任务
-  /// @param task_digest 
-  /// @return 
   std::optional<TaskDesc> TryFindTask(const std::string& task_digest) const;
 
   void Stop();
   void Join();
  
  private:
-  void OnTimerRefresh();
+  void OnTimerRefresh(Poco::Timer& timer);
 
  private:
+  Poco::Timer timer_;
   std::unique_ptr<scheduler::SchedulerService::Stub> scheduler_stub_;
-  std::mutex mutex_;
+  mutable std::mutex mutex_;
   std::unordered_map<std::string, TaskDesc> running_tasks_;
-  std::chrono::steady_clock::time_point last_update_time_;
+  std::chrono::steady_clock::time_point last_update_time_; // 记录上次更新时间，当断开与scheduler连接后用来判断清除数据
   std::uint64_t sync_timer_;
 };
 

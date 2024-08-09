@@ -4,9 +4,11 @@
 #include <mutex>
 #include <unordered_set>
 #include <condition_variable>
+#include <Poco/Timer.h>
 
 namespace distribuild::daemon::local {
 
+/// @brief 用户监控任务是否超过负载
 class TaskMonitor {
  public:
   static TaskMonitor* Instance();
@@ -27,9 +29,11 @@ class TaskMonitor {
  
  private:
   // 检查进程是否存活并清理
-  void OnTimerCheckAliveProc(pid_t pid);
+  void OnTimerCheckAliveProc(Poco::Timer& timer);
 
  private:
+  Poco::Timer timer_;
+
   /// @brief 最大重量级任务数
   std::size_t max_heavy_tasks_;
 

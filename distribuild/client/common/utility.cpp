@@ -1,9 +1,8 @@
-#include "utility.h"
-#include "distribuild/common/logging.h"
-
-#include <string.h>
+#include "client/common/utility.h"
+#include "common/logging.h"
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <cstring>
 
 namespace distribuild::client {
 
@@ -21,13 +20,13 @@ std::string GetBaseName(const std::string& name) {
 
 std::string GetRealPath(const std::string& name) {
   char buf[PATH_MAX + 1]{};
-  if (realpath(name.c_str(), buf), buf) {
+  if (realpath(name.c_str(), buf)) {
 	return buf;
   }
   return std::string();
 }
 
-std::string distribuild::client::FindExecutableInPath(
+std::string FindExecutableInPath(
     const std::string& executable,
     const std::function<bool(const std::string&)>& filter) {
   char* path = getenv("PATH");
@@ -43,7 +42,7 @@ std::string distribuild::client::FindExecutableInPath(
 	}
 
 	auto dir = std::string_view(path, length);
-	LOG_DEBUG("Looking up for '{}' in '{}", executable, dir);
+	LOG_DEBUG("在目录 '{}' 中寻找 '{}'", dir, executable);
 
 	auto file = fmt::format("{}/{}", dir, executable);
 	auto real_path = GetRealPath(file);
@@ -62,8 +61,7 @@ std::string distribuild::client::FindExecutableInPath(
   LOG_FATAL("Failed to find executable file '{}'", executable);
 }
 
-std::pair<std::uint64_t, std::uint64_t> GetFileModifytimeAndSize(
-    const std::string& file) {
+std::pair<std::uint64_t, std::uint64_t> GetFileModifytimeAndSize(const std::string& file) {
   struct stat result;
   DISTBU_CHECK(lstat(file.c_str(), &result) == 0);
   return std::pair(result.st_mtime, result.st_size);

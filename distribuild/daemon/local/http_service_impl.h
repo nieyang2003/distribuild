@@ -18,8 +18,9 @@ class HttpServiceImpl : public Poco::Net::HTTPRequestHandler {
   using Handler = std::function<void(Poco::Net::HTTPServerRequest&, Poco::Net::HTTPServerResponse&)>;
 
   HttpServiceImpl();
+  virtual ~HttpServiceImpl() override = default;
   
-  void handleRequest(Poco::Net::HTTPServerRequest& request, Poco::Net::HTTPServerResponse& response);
+  void handleRequest(Poco::Net::HTTPServerRequest& request, Poco::Net::HTTPServerResponse& response) override;
 
  private:
   /// @brief 用户获取服务版本号
@@ -59,6 +60,16 @@ class HttpServiceImpl : public Poco::Net::HTTPRequestHandler {
  private:
   std::unordered_map<std::string, Handler> get_router_;
   std::unordered_map<std::string, Handler> post_router_;
+};
+
+class HttpFactory : public Poco::Net::HTTPRequestHandlerFactory {
+ public:
+  HttpFactory() {}
+  ~HttpFactory() {};
+
+  Poco::Net::HTTPRequestHandler* createRequestHandler(const Poco::Net::HTTPServerRequest& request) override {
+      return new HttpServiceImpl;
+  }
 };
 
 } // namespace distribuild::daemon::local

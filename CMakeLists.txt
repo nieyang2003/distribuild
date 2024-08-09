@@ -1,6 +1,10 @@
 # 编译器所需版本
 cmake_minimum_required(VERSION 3.20)
 
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF) # 禁用 GNU 扩展，以确保标准一致
+
 # 名称
 project(distribuild C CXX)
 
@@ -11,10 +15,10 @@ set(CMAKE_BUILD_TYPE "Debug")
 set(CMAKE_VERBOSE_MAKEFILE ON)
 
 # 设置C++编译器编译选项
-set(CMAKE_CXX_FLAGS "$ENV{CXXFLAGS} -rdynamic -O3 -fPIC -ggdb -std=c++2a -Wall -Wno-deprecated -Werror -Wno-unused-function -Wno-builtin-macro-redefined -Wno-deprecated-declarations")
+set(CMAKE_CXX_FLAGS "$ENV{CXXFLAGS} -rdynamic -O3 -fPIC -ggdb -Wall -Wno-deprecated -Werror -Wno-unused-function -Wno-builtin-macro-redefined -Wno-deprecated-declarations")
 
 # 设置C编译编译选项
-set(CMAKE_C_FLAGS "$ENV{CXXFLAGS} -rdynamic -O3 -fPIC -ggdb -std=c11 -Wall -Wno-deprecated -Werror -Wno-unused-function -Wno-builtin-macro-redefined -Wno-deprecated-declarations")
+set(CMAKE_C_FLAGS "$ENV{CXXFLAGS} -rdynamic -O3 -fPIC -ggdb -Wall -Wno-deprecated -Werror -Wno-unused-function -Wno-builtin-macro-redefined -Wno-deprecated-declarations")
 
 # 设置搜索路径
 include_directories(distribuild)
@@ -22,16 +26,13 @@ include_directories(distribuild)
 # 创建源码变量
 set(SRC_LIST)
 
-# # 搜索源文件
-# file(GLOB SRC_LIST distribuild/*.cc distribuild/*.h distribuild/*/*.cc distribuild/*/*.h)
-
 # 设置动态库生成路径
 set(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/lib)
 
 # 设置可执行文件生成路径
 SET(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin)
 
-# # 制作动态库
+# 制作动态库
 # add_library(distribuild SHARED ${SRC_LIST})
 
 # 添加第三方库
@@ -44,14 +45,8 @@ find_package(gRPC REQUIRED)
 find_package(Poco REQUIRED COMPONENTS Foundation Net Util)
 # find_package(Zstd REQUIRED)
 # find_package(Blake3 REQUIRED)
-# concurrencpp / PhotonLibOS
-
-set(LIBS
-    distribuild
-    fmt::fmt
-    gtest_main
-    GTest::gtest
-)
+find_package(gflags REQUIRED)
+find_package(Poco REQUIRED COMPONENTS Foundation)
 
 add_subdirectory(distribuild)
 

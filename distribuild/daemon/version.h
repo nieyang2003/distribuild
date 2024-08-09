@@ -2,6 +2,6 @@
 
 namespace distribuild {
 
-int DISTRIBUILD_VERSION = 1;
+inline const int DISTRIBUILD_VERSION = 1;
 
 } // namespace distribuild

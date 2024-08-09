@@ -1,10 +1,11 @@
-#include "cache_reader.h"
-
 #include <grpc/grpc.h>
 #include <grpcpp/grpcpp.h>
 #include <grpcpp/create_channel.h>
-
-#include "distribuild/common/logging.h"
+#include <grpcpp/impl/codegen/time.h>
+#include "common/logging.h"
+#include "common/tools.h"
+#include "daemon/local/cache_reader.h"
+#include "daemon/config.h"
 
 using namespace std::literals;
 
@@ -15,29 +16,32 @@ CacheReader* CacheReader::Instance() {
   return &instance;
 }
 
-CacheReader::CacheReader() {
+CacheReader::CacheReader()
+  : timer_(0, 3'000) /* 3s */ {
   if (true) {
 	return;
   }
 
-  auto channel = grpc::CreateChannel("127.0.0.1:10000", grpc::InsecureChannelCredentials());
+  auto channel = grpc::CreateChannel(FLAGS_cache_server_location, grpc::InsecureChannelCredentials());
   stub_ = cache::CacheService::NewStub(channel);
   DISTBU_CHECK(stub_);
 
   // 创建成功后立即填充布隆过滤器
-  OnTimerLoadBloomFilter();
+  OnTimerLoadBloomFilter(timer_);
   last_bf_full_update_ = last_bf_update_ = std::chrono::steady_clock::now();
 
-  // TODO: 启动定时器，OnTimerLoadBloomFilter
+  LOG_INFO("启动定时器 OnTimerLoadBloomFilter");
+  timer_.start(Poco::TimerCallback<CacheReader>(*this, &CacheReader::OnTimerLoadBloomFilter));
 }
 
 CacheReader::~CacheReader() {
-  // TODO: 注销定时器
+  timer_.stop();
 }
 
 std::optional<CacheEntry> CacheReader::TryRead(const std::string& key) {
+  return std::nullopt;
   if (!stub_) {
-	return std::nullopt;
+	return std::nullopt; // 未启用缓存
   }
 
   {
@@ -47,29 +51,32 @@ std::optional<CacheEntry> CacheReader::TryRead(const std::string& key) {
 	  return std::nullopt;
 	}
   }
-
+  
+  //可能命中，准备获取
   grpc::ClientContext context;
   cache::TryGetEntryRequest  req;
   grpc::CompletionQueue cq;
-  cache::TryGetEntryResponse res;
+  cache::TryGetEntryResponse resp;
   
-  context.set_deadline(std::chrono::steady_clock::now() + 10s);
-  req.set_token("123456");
+  SetTimeout(&context, 10s);
+  req.set_token(FLAGS_cache_server_token);
   req.set_key(key);
   
   auto status = stub_->AsyncTryGetEntry(&context, req, &cq);
   // TODO: 异步操作
   
+  return std::nullopt;
 }
 
-void CacheReader::OnTimerLoadBloomFilter() {
+void CacheReader::OnTimerLoadBloomFilter(Poco::Timer& timer) {
   auto now = std::chrono::steady_clock::now();
+
   grpc::ClientContext context;
   cache::FetchBloomFilterRequest  req;
-  cache::FetchBloomFilterResponse res;
+  cache::FetchBloomFilterResponse resp;
 
-  context.set_deadline(now + 10s);
-  req.set_token("123456");
+  SetTimeout(&context, 10s);
+  req.set_token(FLAGS_cache_server_token);
   {
 	std::scoped_lock lock(bf_mutex_);
 	if (last_bf_full_update_.time_since_epoch() == 0s) {
@@ -82,20 +89,20 @@ void CacheReader::OnTimerLoadBloomFilter() {
 	}
   }
   
-  auto status = stub_->FetchBloomFilter(&context, req, &res);
+  auto status = stub_->FetchBloomFilter(&context, req, &resp);
   if (!status.ok()) {
 	LOG_WARN("获取布隆过滤器失败：{}", status.error_details());
 	return;
   }
   last_bf_update_ = now;
 
-  if (res.incremental()) {
+  if (resp.incremental()) {
 	// 增量更新
-	for (auto&& e : res.newly_populated_keys()) {
+	for (auto&& e : resp.newly_populated_keys()) {
 	  std::scoped_lock lock(bf_mutex_);
 	  bloom_filter_.Add(e);
 	}
-	LOG_INFO("更新了{}个新的键", res.newly_populated_keys_size());
+	LOG_INFO("更新了{}个新的键", resp.newly_populated_keys_size());
   } else {
     // 全量更新
 	last_bf_full_update_ = now;

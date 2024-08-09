@@ -11,9 +11,9 @@ enum Status {
 
 // 节点优先级
 enum ServantPriority {
-  SERVANT_PRIORITY_UNKNOWN   = 0;
-  SERVANT_PRIORITY_USER      = 1;
-  SERVANT_PRIORITY_DEDICATED = 2;
+  SERVANT_PRIORITY_UNKNOWN   = 0;  // 未知节点
+  SERVANT_PRIORITY_USER      = 1;  // 用户节点
+  SERVANT_PRIORITY_DEDICATED = 2;  // 专用节点
 }
 
 // 新分配任务
@@ -26,6 +26,7 @@ message StartingTaskGrant {
 enum RejectTaskReason {
   REJECT_TASK_REASON_UNKNOWN = 0;
   REJECT_TASK_REASON_POOR    = 1;
+  REJECT_TASK_REASON_NAT     = 2;
 }
 
 // --------------------------------------------------------- //
@@ -36,13 +37,14 @@ message HeartBeatRequest {
   string token = 13;                        // 访问调度器的令牌
   uint32 next_heart_beat_in_ms = 1;         // 下次心跳的超时时间
   uint32 version = 2;                       // daemon版本
-  string reported_location = 3;             // 报告地址
+  string location = 3;                      // 自己设置并报告的地址
+  uint32 num_cpu_cores = 12;                // cpu核数
   uint32 current_load = 4;                  // 当前负载
-  ServantPriority servant_priority = 5;     // 赋予节点时的优先级
+  ServantPriority priority = 5;             // 赋予节点时的优先级
   uint32 concurrency = 7;                   // 可以提供的最大并发任务数
   uint32 not_accepting_reason = 6;          // 为什么没有并发
-  uint32 total_memory_in_bytes = 8;         // 内存总大小
-  uint32 memory_available_in_bytes = 9;     // 可用内存大小
+  uint64 total_memory_in_bytes = 8;         // 内存总大小
+  uint64 avail_memory_in_bytes = 9;         // 可用内存大小
   repeated EnviromentDesc env_descs = 10;   // 可用编译器列表
   repeated RunningTask running_tasks = 11;  // 正在执行的任务列表
 }
@@ -71,13 +73,13 @@ message GetConfigResponse {
 
 // 等待任务请求
 message WaitForStaringTaskRequest {
-  string token                 = 10;   // 访问daemon的令牌
+  string token                 = 10;   // 令牌
   uint32 mills_to_wait         = 1;    // 
-  EnviromentDesc env_desc      = 2;    // 
+  EnviromentDesc env_desc      = 2;    // 编译器
   uint32 immeadiate_reqs       = 3;    // 
   uint32 prefetch_reqs         = 4;    // 
   uint32 next_keep_alive_in_ms = 5;    // 应该调用KeepAlive的时间段
-  int32  min_version           = 6;    // daemon最小版本
+  uint32  min_version           = 6;    // 守护进程最小版本
 }
 
 // 等待任务响应
@@ -150,5 +152,6 @@ service SchedulerService {
   // 
   rpc FreeTask(FreeTaskRequst) returns (FreeTaskResponse);
 
+  // 
   rpc GetRunningTasks(GetRunningTasksRequest) returns (GetRunningTasksResponse);
 }

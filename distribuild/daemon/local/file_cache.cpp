@@ -9,9 +9,7 @@ FileCache* FileCache::Instance() {
 
 FileCache::FileCache() {}
 
-std::optional<std::string> FileCache::TryGet(const std::string& path,
-                                             std::uint64_t size,
-                                             std::uint64_t mtime) const {
+std::optional<std::string> FileCache::TryGet(const std::string& path, std::uint64_t size, std::uint64_t mtime) const {
   std::shared_lock lock(mutex_);
   if (auto iter = caches_.find(path);
       iter != caches_.end() &&
@@ -24,7 +22,7 @@ std::optional<std::string> FileCache::TryGet(const std::string& path,
 
 void FileCache::Set(const std::string& path, std::uint64_t size, std::uint64_t mtime, const std::string& hash) {
   std::shared_lock lock(mutex_);
-  caches_[path] = CacheDesc{
+  caches_[path] = CacheDesc {
 	.size = size,
 	.mtime = mtime,
 	.hash = hash,

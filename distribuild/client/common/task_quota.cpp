@@ -1,50 +1,44 @@
-#include "task_quota.h"
-
-#include <fmt/format.h>
+#include "client/common/task_quota.h"
+#include "client/common/daemon_call.h"
+#include "client/common/config.h"
+#include "common/logging.h"
 #include <thread>
-
-#include "daemon_call.h"
-#include "distribuild/common/logging.h"
+#include <sstream>
+#include <fmt/format.h>
+#include <Poco/Net/HTTPClientSession.h>
+#include <Poco/Net/HTTPRequest.h>
+#include <Poco/Net/HTTPResponse.h>
+#include <Poco/StreamCopier.h>
+#include <Poco/Exception.h>
 
 using namespace std::literals;
 
 namespace distribuild::client {
 
 void ReleaseTaskQuota() {
-  std::string body = fmt::format("{{\"requestor_pid\": {}}}", getpid());
-  DaemonCall("/local/release_quota", {"Content-Type: application/json"}, {body}, 5s);
+  Json::Value req_body;
+  req_body["requestor_pid"] = getpid();
+  auto&& [response, body] = DaemonHttpCall("/local/release_quota", req_body, 5);
+  if (response && response->getStatus() != 200) {
+	LOG_ERROR("失败：status: {} {} {}", (int)response->getStatus(), response->getReason(), body);
+  }
 }
 
-TaskQuota distribuild::client::TryAcquireTaskQuota(bool lightweight, std::chrono::nanoseconds timeout) {
-  // 报文
-  std::string api = "/local/acquire_quota";
-  std::vector<std::string> headers = {"Content-Type: application/json"};
-  std::string body = fmt::format(
-	"{{"
-	"\"timeout_ms\": {}, "
-	"\"lightweight\": {}, "
-	"\"requestor_pid\": {}"
-	"}}",
-	timeout / 1ms, lightweight ? "true" : "false", getpid()
-  );
-  // http请求
-  DaemonResponse response = DaemonCall(api, headers, {body}, timeout + 10s);
-  // 处理响应
-  if (response.status == 200) { // 已经接受
-    // 利用析构构造
-	// reinterpret_cast 是一种强制类型转换，用于将一个指针转换为另一种指针类型，或将整数转换为指针类型等。
-    return std::shared_ptr<void>(reinterpret_cast<void*>(1), [](auto) { ReleaseTaskQuota(); });
-  } else if (response.status == 503) {
-    // do nothing
-  } else if (response.status == -1) {
-    LOG_ERROR("无法访问http服务");
-	std::this_thread::sleep_for(1s);
-  } else {
-    LOG_ERROR("错误的http状态码: ", response.status);
-	std::this_thread::sleep_for(1s);
-  }
+TaskQuota TryAcquireTaskQuota(bool lightweight, std::chrono::seconds timeout) {
+  Json::Value req_body;
 
-  // 未响应
+  req_body["ms_to_wait"] = timeout / 1s;
+  req_body["lightweight"] = lightweight;
+  req_body["requestor_pid"] = getpid();
+
+  auto&& [response, body] = DaemonHttpCall("/local/acquire_quota", req_body, 5);
+  if (response && response->getStatus() == 200) {
+	return std::shared_ptr<void>(reinterpret_cast<void*>(1), [](auto) { ReleaseTaskQuota(); });
+  }
+  if (response) {
+    LOG_ERROR("失败：status: {} {}\n{}", (int)response->getStatus(), response->getReason(), body);
+  }
+  std::this_thread::sleep_for(1s);
   return nullptr;
 }
 
@@ -56,8 +50,8 @@ TaskQuota AcquireTaskQuota(bool lightweight) {
     if (acquired) {
       return acquired;
     }
-    
-	int threshold = 30;
+
+	int threshold = 30; // ! config
 	auto waited = std::chrono::steady_clock::now() - start;
 	if (threshold && waited / 1s > threshold) {
       LOG_WARN("无法获得许可，服务器可能过载，已等待 {} 秒", waited / 1s);

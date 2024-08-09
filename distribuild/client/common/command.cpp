@@ -1,7 +1,6 @@
-#include "command.h"
-#include "distribuild/common/logging.h"
-#include "distribuild/client/common/io.h"
-
+#include "client/common/command.h"
+#include "common/logging.h"
+#include "common/io.h"
 #include <sys/wait.h>
 #include <unistd.h>
 #include <stdio.h>
@@ -14,6 +13,7 @@ namespace distribuild::client {
 
 namespace {
 
+/// @brief 子进程信息
 struct ProgramStartupInfo {
   int pid;
   int stdin_writer;
@@ -29,7 +29,7 @@ std::pair<int, int> CreatePipe() {
   return {fd[0], fd[1]};
 }
 
-/// @brief 返回以空指针为数组结尾的argv数组作为程序允许环境
+/// @brief 返回以空指针为数组结尾的argv数组作为程序运行环境
 std::vector<const char*> BuildArguments(const RewrittenArgs& command) {
   std::vector<const char*> result;
   result.push_back(command.GetProgram().c_str());
@@ -72,7 +72,7 @@ ProgramStartupInfo StartProgram(const RewrittenArgs& command, const std::initial
 
   // 连接父子进程
   int pid = vfork();
-  DISTBU_CHECK(pid >= 0, "创建子进程失败");
+  DISTBU_CHECK_FORMAT(pid >= 0, "创建子进程失败");
   if (pid == 0) { // 子进程
     dup2(stdin_reader,   STDIN_FILENO);
 	dup2(stdout_writer, STDOUT_FILENO);
@@ -83,7 +83,7 @@ ProgramStartupInfo StartProgram(const RewrittenArgs& command, const std::initial
 	close(stdin_writer);
     close(stdout_reader);
     close(stderr_reader);
-    syscall(SYS_execve, command.GetProgram().c_str(), argvs.data(), envs);
+    syscall(SYS_execve, command.GetProgram().c_str(), argvs.data(), envs); // 执行命令
 	_exit(127);
   }
 
@@ -96,7 +96,10 @@ ProgramStartupInfo StartProgram(const RewrittenArgs& command, const std::initial
   SetNonblocking(stderr_reader);
 
   // 返回父进程信息
-  return ProgramStartupInfo{pid, stdin_writer, stdout_reader, stderr_reader};
+  return ProgramStartupInfo{.pid = pid,
+                            .stdin_writer = stdin_writer, 
+                            .stdout_reader = stdout_reader,
+							.stderr_reader = stderr_reader};
 }
 
 /// @brief 获取子进程退出状态码
@@ -108,11 +111,11 @@ int GetChildExitCode(int pid) {
 	  if (errno == EINTR) {  // 系统调用被中断则继续等待
 		continue;
 	  }
-	  DISTBU_CHECK(false, "等待子进程失败");
+	  DISTBU_CHECK_FORMAT(false, "等待子进程失败");
 	}
 	break;
   }
-  DISTBU_CHECK(WIFEXITED(status), "子进程错误退出 status = {}", status); // 
+  DISTBU_CHECK_FORMAT(WIFEXITED(status), "子进程错误退出 status = {}", status); // 
   return WEXITSTATUS(status); // 提取子进程的退出状态码并返回
 }
 
@@ -155,7 +158,7 @@ void HandleProgramIO(const ProgramStartupInfo& pinfo, const std::string& input,
 	}
 
 	// 处理事件
-	for (int i = 0; i < events; ++i) {
+	for (int i = 0; i < nfds; ++i) {
 	  if (fds[i].revents == 0) continue;
       
 	  if (fds[i].fd == pinfo.stdin_writer) {
@@ -167,12 +170,12 @@ void HandleProgramIO(const ProgramStartupInfo& pinfo, const std::string& input,
 		  stdin_bytes += bytes;
 		  if (stdin_bytes == input.size()) {
 			in_done = true;
-			DISTBU_CHECK(close(pinfo.stdin_writer) == 0, "close错误");
-		  } else {
-			LOG_WARN("子进程关闭标准输入");
-			in_done = true;
-			DISTBU_CHECK(close(pinfo.stdin_writer) == 0);
+			DISTBU_CHECK_FORMAT(close(pinfo.stdin_writer) == 0, "close错误");
 		  }
+		} else {
+		  LOG_WARN("子进程关闭标准输入");
+		  in_done = true;
+		  DISTBU_CHECK(close(pinfo.stdin_writer) == 0);
 		}
 	  } else if (fds[i].fd == pinfo.stdout_reader) {
 		// 子进程与父进程管道连接
@@ -197,7 +200,7 @@ void HandleProgramIO(const ProgramStartupInfo& pinfo, const std::string& input,
           standard_error->append(io_buffer, bytes);
 		} else {
 		  DISTBU_CHECK(bytes == 0);
-		  out_done = true;
+		  err_done = true;
           DISTBU_CHECK(close(pinfo.stderr_reader) == 0);
 		}
 	  } else {
@@ -206,7 +209,7 @@ void HandleProgramIO(const ProgramStartupInfo& pinfo, const std::string& input,
 	}
   }
   
-  LOG_DEBUG("标准输入读取{}字节，标准输出{}字节，标准错误{}字节",
+  LOG_DEBUG("标准输入写入{}字节，标准输出{}字节，标准错误{}字节",
             stdin_bytes, stdout_bytes, standard_error->size());
 }
 
@@ -215,7 +218,7 @@ void HandleProgramIO(const ProgramStartupInfo& pinfo, const std::string& input,
 // --------------------------------------------------------------------------- //
 
 int CompileOnNative(const std::string& program, const char** argv) {
-  LOG_DEBUG("开始本机编译");
+  LOG_DEBUG("开始本机直接编译");
 
   // 构造命令
   std::vector<const char*> argvs;
@@ -226,7 +229,7 @@ int CompileOnNative(const std::string& program, const char** argv) {
   argvs.push_back(nullptr);
 
   int pid = fork();
-  DISTBU_CHECK(pid >= 0, "创建子进程失败");
+  DISTBU_CHECK_FORMAT(pid >= 0, "创建子进程失败");
 
   if (pid == 0) { // child
     execvp(argvs[0], const_cast<char* const *>(argvs.data()));
@@ -246,11 +249,11 @@ int ExecuteCommand(const RewrittenArgs& command,
                    const std::string& input,
 				   OutStream* standard_output,
                    std::string* standard_error) {
-  LOG_DEBUG("执行命令", command.ToString());
+  LOG_DEBUG("开始预处理：`{}`", command.ToString());
   ProgramStartupInfo pinfo = StartProgram(command, extra_envs);
   HandleProgramIO(pinfo, input, standard_output, standard_error);
   auto exit_code = GetChildExitCode(pinfo.pid);
-  LOG_DEBUG("命令执行完毕，exit_code = {}", exit_code);
+  LOG_DEBUG("预处理完毕，exit_code = {}", exit_code);
   return exit_code;
 }
 

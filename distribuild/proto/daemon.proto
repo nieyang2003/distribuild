@@ -20,6 +20,7 @@ enum TaskStatus {
   TASK_STATUS_NOT_FOUND  = 4;
 }
 
+// 源码压缩类型
 enum CompressType {
   COMPRESS_TYPE_UNKNOWN = 0;
   COMPRESS_TYPE_ZSTD    = 1;
@@ -34,14 +35,19 @@ message QueueCxxTaskRequest {
   string source_path            = 4;
   string args                   = 5;
   CompressType compress_type    = 6;
-  bool disfill_cache            = 7;
+  bool fill_cache               = 7;
 }
 
 message QueueCxxTaskResponse {
   uint64 task_id = 1;
 }
 
-// ----------------- QueueCxxTask ----------------- //
+message QueueCxxTaskRequestChunk {
+  QueueCxxTaskRequest request = 2;
+  bytes file_chunk = 1;
+}
+
+// ----------------- AddTaskRef ----------------- //
 
 message AddTaskRefRequest {
   string token   = 1;
@@ -59,7 +65,7 @@ message FreeTaskRequest {
 
 message FreeTaskResponse {}
 
-// ----------------- QueueCxxTask ----------------- //
+// ----------------- WaitForTask ----------------- //
 
 message WaitForTaskRequest {
   string token   = 1;
@@ -78,11 +84,20 @@ message WaitForTaskResponse {
   google.protobuf.Any extra_info = 7;
 }
 
+message WaitForTaskResponseChunk {
+  WaitForTaskResponse response = 2;
+  bytes file_chunk = 1;
+}
+
 // ----------------- DaemonService ----------------- //
 
 service DaemonService {
-  rpc QueueCxxTask(QueueCxxTaskRequest) returns (QueueCxxTaskResponse);
+
+  rpc QueueCxxTask(stream QueueCxxTaskRequestChunk) returns (QueueCxxTaskResponse);
+
   rpc AddTaskRef(AddTaskRefRequest) returns (AddTaskRefResponse);
+
   rpc FreeTask(FreeTaskRequest) returns (FreeTaskResponse);
-  rpc WaitForTask(WaitForTaskRequest) returns (WaitForTaskResponse);
+
+  rpc WaitForTask(WaitForTaskRequest) returns (stream WaitForTaskResponseChunk);
 }

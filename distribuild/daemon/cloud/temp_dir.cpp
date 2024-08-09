@@ -1,21 +1,18 @@
-#include "temp_dir.h"
-
 #include <chrono>
 #include <Poco/Random.h>
 #include <unistd.h>
 #include <stdio.h>
 #include <fcntl.h>
 #include <fstream>
-
-#include "distribuild/common/logging.h"
-#include "distribuild/common/dir.h"
+#include "daemon/cloud/temp_dir.h"
+#include "common/logging.h"
+#include "common/dir.h"
 
 namespace distribuild::daemon::cloud {
 
 TempDir::TempDir(const std::string& prefix) {
-  path_ = fmt::format("{}/distribuild_{}_{}", prefix,
-      std::time(nullptr), Poco::Random().next());
-  MkDir(path_);
+  path_ = fmt::format("{}/distribuild_{}_{}", prefix, std::time(nullptr), Poco::Random().next());
+  distribuild::Mkdirs(path_);
   alive_ = true;
 }
 
@@ -27,13 +24,13 @@ std::vector<std::pair<std::string, std::string>> TempDir::ReadAll(const std::str
   DISTBU_CHECK(alive_);
   std::vector<std::pair<std::string, std::string>> result;
   auto root_dir = fmt::format("{}/{}", path_, subdir);
-  auto dir_nodes = GetDirNodesRecursively(root_dir);
+  auto dir_nodes = distribuild::GetDirNodesRecursively(root_dir);
 
   for (auto&& node : dir_nodes) {
 	if (node.is_regular) {
 	  auto path = fmt::format("{}/{}", root_dir, node.name);
 	  std::ifstream ifs(path, std::ios::in | std::ios::binary);
-	  DISTBU_CHECK(ifs, "打开文件失败");
+	  DISTBU_CHECK_FORMAT(ifs, "打开文件失败");
 	  std::string content((std::istreambuf_iterator<char>(ifs)), std::istreambuf_iterator<char>());
 	  result.emplace_back(node.name, content);
 	}
@@ -49,7 +46,7 @@ void TempDir::Clear() {
   }
 }
 const std::string& GetTempDir() {
-  static const std::string result = "tmp";
+  static const std::string result = "/tmp";
   return result;
 }
 

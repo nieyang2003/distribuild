@@ -14,7 +14,7 @@ message Locations {
 message FileDesc {
   string path      = 1;
   uint64 size      = 2;
-  uint64 timestamp = 3;
+  uint64 mtime     = 3;
 }
 
 message CxxExtraInfo {

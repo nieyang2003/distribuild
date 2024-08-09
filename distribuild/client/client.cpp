@@ -1,14 +1,12 @@
-#include "distribuild/common/logging.h"
-#include "distribuild/common/string.h"
-
-#include "distribuild/client/common/utility.h"
-#include "distribuild/client/common/command.h"
-#include "distribuild/client/common/task_quota.h"
-#include "distribuild/client/common/io.h"
-#include "distribuild/client/cxx/compilition.h"
-
-#include "compiler_args.h"
-#include "rewrite_file.h"
+#include "common/logging.h"
+#include "common/tools.h"
+#include "client/common/utility.h"
+#include "client/common/command.h"
+#include "client/common/task_quota.h"
+#include "common/io.h"
+#include "client/cxx/compilition.h"
+#include "client/cxx/compiler_args.h"
+#include "client/cxx/rewrite_file.h"
 
 namespace distribuild::client {
 
@@ -17,10 +15,22 @@ using namespace std::literals;
 /// @brief 根据参数判断是否可以在远程执行
 bool IsDistributable(const CompilerArgs& args) {
   if (!args.TryGet("-c")) {
-	LOG_TRACE("不可用选项 '-c'，退出"); // 重写后删去
+	LOG_TRACE("非编译任务 '-c'"); // 重写后删去
 	return false;
   }
-  // TODO
+  if (args.TryGet("-")) {
+	LOG_TRACE("不支持从标准输入读取源码");
+	return false;
+  }
+  if (args.GetFilenames().size() != 1) {
+	LOG_TRACE("不支持多个文件");
+	return false;
+  }
+  if (EndWith(args.GetFilenames()[0], ".s") || EndWith(args.GetFilenames()[0], ".S")) {
+	LOG_TRACE("不支持编译汇编");
+	return false;
+  }
+  // ! 更多选项...
   return true;
 }
 
@@ -59,37 +69,40 @@ void WriteCompileResult(const std::string& destination, const std::vector<std::p
 }
 
 /// @brief 编译程序主流程
-int Compile(int argc, const char* argv[]) {
+int Compile(int argc, const char** argv) {
   // distribuild g++ ...
-  bool use_this = EndWith(argv[0], "distribuild");
-  int skip = use_this ? 2 : 1;
+  if (!EndWith(argv[0], "distribuild")) {
+	LOG_WARN("程序名 {} 非distribuild", argv[0]);
+  }
 
-  CompilerArgs args(argc - skip, argv + skip);
+  CompilerArgs args(argc - 2, argv + 2);
 
   // 找到实际编译器绝对路径
-  if (use_this && argv[1][0] == '/') {
+  if (argv[1][0] == '/') {
 	// distribuild /usr/bin/.../g++ 
+	LOG_DEBUG("使用绝对路径 `{}`", argv[1]);
     args.SetCompiler(argv[1]); // 直接使用了绝对路径
   } else {
 	// 找到绝对路径
-    args.SetCompiler(FindExecutableInPath(GetBaseName(argv[skip - 1]), [](auto&& path) {
-		return !EndWith(path, "ccache") &&
-		       !EndWith(path, "distcc");
-	}));
+    args.SetCompiler(FindExecutableInPath(GetBaseName(argv[1]), [](auto&& path) {
+	    return !EndWith(path, "ccache") &&
+               !EndWith(path, "distcc");
+	  }));
   }
   LOG_TRACE("使用编译器: {}", args.GetCompiler());
 
-  // 编译仿函数
-  auto compile_on_native = [&](auto&& quota) -> int {
-    return CompileOnNativeUsingQuota(args.GetCompiler(), argv + skip, quota);
+  // 直接本地编译
+  auto compile_on_native = [&](auto&& quota) {
+    return CompileOnNativeUsingQuota(args.GetCompiler(), argv + 2, quota);
   };
-  auto compile_on_native_using_quota = [&] -> int {
+  // 编译前后获得、释放配额防止超载
+  auto compile_on_native_using_quota = [&] {
     return compile_on_native(AcquireTaskQuota(IsLightweight(args)));
   };
 
   // 是否可在云端执行
   if (!IsDistributable(args)) {
-	LOG_TRACE("无法远程执行，开始本地执行");
+	LOG_TRACE("非远程执行任务，开始本地执行");
     return compile_on_native_using_quota();
   }
 
@@ -115,23 +128,25 @@ int Compile(int argc, const char* argv[]) {
   // 编译
   int retries = 5;
   while (true) {
+	// 提交编译
     CompileResult compile_result = CompileOnCloud(args, std::move(*rewritten));
+	// 获取结果与重试
 	if (compile_result.exit_code < 0 || compile_result.exit_code == 127) { // 失败或编译器错误
 	  if (auto quota = TryAcquireTaskQuota(false, 10s)) {
-		LOG_INFO("云端编译失败，尝试本地编译。exit_code = {}", compile_result.exit_code);
+		LOG_INFO("云端编译失败 exit_code = {}，尝试本地编译。", compile_result.exit_code);
 		return compile_on_native(quota);
 	  }
 
 	  // 尝试重新提交
 	  if (retries--) {
 		LOG_TRACE("在云端编译失败, exit_code = {}, 重试", compile_result.exit_code);
-        
-		// TODO: 
 		if (rewritten = RewriteFile(args)) { // 被move所以重新生成
 		  continue;
 		}
 	  }
 	}
+
+	// 云端编译失败
 	if (compile_result.exit_code != 0) {
 	  LOG_DEBUG("在云端编译失败");
 	  if (compile_result.exit_code == 1) {
@@ -143,8 +158,8 @@ int Compile(int argc, const char* argv[]) {
 	}
 
 	LOG_TRACE("云端编译成功");
-	fprintf(stdout, "%s", compile_result.out_put.c_str());
-	fprintf(stderr, "%s", compile_result.error.c_str());
+	fprintf(stdout, "%s", compile_result.std_out.c_str());
+	fprintf(stderr, "%s", compile_result.std_err.c_str());
 	WriteCompileResult(args.GetOutputFile(), compile_result.output_files);
 	break;
   }
@@ -155,11 +170,11 @@ int Compile(int argc, const char* argv[]) {
 } // namespace distribuild::client
 
 
-int main(int argc, char** argv) {
+int main(int argc, const char** argv) {
   // 环境
   setenv("LC_ALL", "en_US.utf8", true);
 
-  // TODO: 日志
+  // TODO: 初始化
 
   // 参数
   if (argc == 1) {
@@ -170,7 +185,7 @@ int main(int argc, char** argv) {
   // 编译
   LOG_TRACE("开始编译");
   int rt = distribuild::client::Compile(argc, argv);
-  LOG_TRACE("编译完成");
+  LOG_TRACE("退出编译");
 
   // 退出
   return rt;

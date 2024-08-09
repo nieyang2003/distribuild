@@ -1,12 +1,12 @@
-#include "task_dispatcher.h"
-
 #include <grpc/grpc.h>
 #include <grpcpp/create_channel.h>
 #include <sys/stat.h>
-
-#include "distribuild/common/logging.h"
-#include "distribuild/daemon/local/cache_reader.h"
-#include "distribuild/daemon/version.h"
+#include "daemon/local/task_dispatcher.h"
+#include "common/logging.h"
+#include "common/tools.h"
+#include "daemon/local/cache_reader.h"
+#include "daemon/version.h"
+#include "daemon/config.h"
 
 using namespace std::literals;
 
@@ -31,16 +31,27 @@ TaskDispatcher* TaskDispatcher::Instance() {
   return &instance;
 }
 
-distribuild::daemon::local::TaskDispatcher::TaskDispatcher() {
-  auto channel = grpc::CreateChannel("127.0.0.1:10000", grpc::InsecureChannelCredentials());
-  auto scheduler_stub_ = scheduler::SchedulerService::NewStub(channel);
+TaskDispatcher::TaskDispatcher()
+  : timer_timeout_abort_(0, 1'000)
+  , timer_keep_alive_(0, 1'000)
+  , timer_killed_abort_(0, 1'000)
+  , timer_clear_(0, 1'000)
+  , task_manager_(Poco::ThreadPool::defaultPool())
+  , scheduler_stub_(scheduler::SchedulerService::NewStub(grpc::CreateChannel(FLAGS_scheduler_location, grpc::InsecureChannelCredentials()))) {
   DISTBU_CHECK(scheduler_stub_);
 
-  // TODO: 启动定时器
+  LOG_INFO("启动定时器：OnTimerTimeoutAbort、OnTimerKeepAlive、OnTimerKilledAbort、OnTimerClear");
+  timer_timeout_abort_.start(Poco::TimerCallback<TaskDispatcher>(*this, &TaskDispatcher::OnTimerTimeoutAbort));
+  timer_keep_alive_.start(Poco::TimerCallback<TaskDispatcher>(*this, &TaskDispatcher::OnTimerKeepAlive));
+  timer_killed_abort_.start(Poco::TimerCallback<TaskDispatcher>(*this, &TaskDispatcher::OnTimerKilledAbort));
+  timer_clear_.start(Poco::TimerCallback<TaskDispatcher>(*this, &TaskDispatcher::OnTimerClear));
 }
 
 TaskDispatcher::~TaskDispatcher() {
-  // TODO: 取消定时器
+  timer_timeout_abort_.stop();
+  timer_keep_alive_.stop();
+  timer_killed_abort_.stop();
+  timer_clear_.stop();
 }
 
 std::uint64_t TaskDispatcher::QueueTask(std::unique_ptr<DistTask> task, std::chrono::steady_clock::time_point start_deadline) {
@@ -54,17 +65,16 @@ std::uint64_t TaskDispatcher::QueueTask(std::unique_ptr<DistTask> task, std::chr
 
   {
     std::scoped_lock lock(tasks_mutex_);
+	LOG_DEBUG("创建local task, id = {}", task_desc->task_id);
     tasks_[task_desc->task_id] = task_desc;
   }
 
-  // TODO: 异步启动一个Task
-  PerformTask(task_desc);
-  
+  task_manager_.start(new PerformPocoTask(this, task_desc));
+
   return task_desc->task_id;
 }
 
-std::pair<std::unique_ptr<DistTask>, TaskDispatcher::WaitStatus> TaskDispatcher::WaitForTask(
-    std::uint64_t task_id, std::chrono::nanoseconds timeout) {
+std::pair<std::unique_ptr<DistTask>, TaskDispatcher::WaitStatus> TaskDispatcher::WaitForTask(std::uint64_t task_id, std::chrono::milliseconds timeout) {
   std::shared_ptr<TaskDesc> task_desc;
   {
 	std::scoped_lock lock(tasks_mutex_);
@@ -73,19 +83,18 @@ std::pair<std::unique_ptr<DistTask>, TaskDispatcher::WaitStatus> TaskDispatcher:
 	}
   }
   if (!task_desc) {
+	LOG_DEBUG("未找到：local task id = {}", task_id);
 	return {nullptr, WaitStatus::NotFound};
   }
-  // TODO: 更好的等待实现
-  while (timeout > 0s && !task_desc->completed_latch.try_wait()) {
-    timeout -= 1s;
-	std::this_thread::sleep_for(1s);
-  }
-  if (timeout <= 0s) {
+
+  if (!task_desc->completion_event.tryWait(timeout.count())) {
+	LOG_DEBUG("等待超时：local task id = {}", task_id);
 	return {nullptr, WaitStatus::Timeout};
   }
 
   {
 	std::scoped_lock lock(tasks_mutex_);
+	LOG_DEBUG("删除local task, id = {}", task_desc->task_id);
 	tasks_.erase(task_id);
   }
   std::scoped_lock lock(task_desc->mutex);
@@ -93,7 +102,10 @@ std::pair<std::unique_ptr<DistTask>, TaskDispatcher::WaitStatus> TaskDispatcher:
 }
 
 void TaskDispatcher::Stop() {
-  // TODO: 取消定时器
+  timer_timeout_abort_.stop();
+  timer_keep_alive_.stop();
+  timer_killed_abort_.stop();
+  timer_clear_.stop();
 
   task_grant_keeper_.Stop();
   config_keeper_.Stop();
@@ -106,24 +118,26 @@ void TaskDispatcher::Join() {
   task_run_keeper_.Join();
 }
 
-void distribuild::daemon::local::TaskDispatcher::PerformTask(std::shared_ptr<TaskDesc> task_desc) {
+void TaskDispatcher::PerformTask(std::shared_ptr<TaskDesc> task_desc) {
+  LOG_DEBUG("开始Perform Task");
   {
 	std::scoped_lock lock(task_desc->mutex);
-	task_desc->output.exit_code = -114;
+	task_desc->output.exit_code = -114514;
   }
-  
-  std::shared_ptr<void> deffer(nullptr, [&]{
-    std::scoped_lock lock(task_desc->mutex);
-	task_desc->task->OnCompleted(task_desc->output);
-	task_desc->state = TaskDesc::State::Done;
-	task_desc->completed_tp = std::chrono::steady_clock::now();
-	task_desc->completed_latch.count_down();
 
-	LOG_INFO("任务 `{}` 编译完成", task_desc->task_id);
+  auto deffer = std::unique_ptr<void, std::function<void(void*)>>((void*)1, [&] (void*) {
+    std::scoped_lock lock(task_desc->mutex);
+    task_desc->task->OnCompleted(std::move(task_desc->output));
+    task_desc->state = TaskDesc::State::Done;
+    task_desc->completed_tp = std::chrono::steady_clock::now();
+	task_desc->completion_event.set();
+
+    LOG_INFO("任务 `{}` 编译完成", task_desc->task_id);
   });
-  
+
   // 查缓存查看是否有结果
   if (TryReadCache(task_desc.get())) {
+    LOG_DEBUG("cache命中");
 	hit_cache_.fetch_add(1, std::memory_order_relaxed);
     return;
   };
@@ -133,7 +147,7 @@ void distribuild::daemon::local::TaskDispatcher::PerformTask(std::shared_ptr<Tas
 	existed_times.fetch_add(1, std::memory_order_relaxed);
 	return;
   }
-  
+
   // 的确不存在，启动新任务
   StartNewServantTask(task_desc.get());
 
@@ -145,12 +159,15 @@ bool TaskDispatcher::TryReadCache(TaskDesc* task_desc) {
   					 CacheReader::Instance()->TryRead(task_desc->task->CacheKey()) :
 					 std::nullopt;
   if (cache_entry) { // 命中缓存
+	auto files = TryUnpackFiles(cache_entry->files);
+	if (!files) return false;
 	task_desc->output = DistTask::DistOutput {
         .exit_code = 0,
 	    .std_out = cache_entry->std_out,
 	    .std_err = cache_entry->std_err,
-	    .output_files = std::move(cache_entry->output_files),
-	  }; // TODO: 所有权优化
+		.extra_info = cache_entry->extra_info,
+	    .output_files = std::move(*files),
+	  };
 	return true;
   }
   return false;
@@ -164,8 +181,7 @@ bool TaskDispatcher::TryGetExistedResult(TaskDesc* task_desc) {
   }
   
   // 创建grpc请求及相应
-  auto stub = cloud::DaemonService::NewStub(
-		grpc::CreateChannel("127.0.0.1:10000", grpc::InsecureChannelCredentials()));
+  auto stub = cloud::DaemonService::NewStub(grpc::CreateChannel(task_desc->servant_location, grpc::InsecureChannelCredentials()));
   grpc::ClientContext context;
   cloud::AddTaskRefRequest  addRefReq;
   cloud::AddTaskRefResponse addRefRes;
@@ -175,7 +191,7 @@ bool TaskDispatcher::TryGetExistedResult(TaskDesc* task_desc) {
   // 发起rpc请求
   auto status = stub->AddTaskRef(&context, addRefReq, &addRefRes);
   if (!status.ok()) {
-	LOG_WARN("RPC请求失败：{}", status.error_details());
+	LOG_WARN("RPC请求失败：{}", status.error_message());
 	return false;
   }
 
@@ -201,8 +217,9 @@ bool TaskDispatcher::TryGetExistedResult(TaskDesc* task_desc) {
 
 void TaskDispatcher::StartNewServantTask(TaskDesc* task_desc) {
   std::optional<TaskGrantKeeper::GrantDesc> task_grant;
+
   while (!task_grant && !task_desc->aborted.load(std::memory_order_relaxed)) {
-	task_grant = task_grant_keeper_.Get(task_desc->task->EnviromentDesc(), 1s);
+	task_grant = task_grant_keeper_.Get(task_desc->task->GetEnviromentDesc(), 1s);
   }
 
   if (!task_grant) {
@@ -210,6 +227,7 @@ void TaskDispatcher::StartNewServantTask(TaskDesc* task_desc) {
 	return;
   }
 
+  LOG_INFO("分发任务给节点：{}", task_grant->servant_location);
   // 更新状态
   {
 	std::scoped_lock lock(task_desc->mutex);
@@ -221,16 +239,15 @@ void TaskDispatcher::StartNewServantTask(TaskDesc* task_desc) {
   }
 
   // rpc通道
-  auto stub = cloud::DaemonService::NewStub(
-		grpc::CreateChannel("127.0.0.1:10000", grpc::InsecureChannelCredentials()));
+  auto stub = cloud::DaemonService::NewStub(grpc::CreateChannel(task_desc->servant_location, grpc::InsecureChannelCredentials()));
 
-  auto task_id = task_desc->task->StartTask(stub.get(), 
-  	config_keeper_.GetServingDaemonToken(), task_grant->grant_id);
+  auto task_id = task_desc->task->StartTask(stub.get(), config_keeper_.GetServingDaemonToken(), task_grant->grant_id);
   if (!task_id) {
 	LOG_ERROR("提交任务失败");
 	task_grant_keeper_.Free(task_grant->grant_id);
 	return;
   }
+  LOG_DEBUG("提交任务给cloud, cloud task id = {}", *task_id);
 
   // 更新状态
   {
@@ -252,9 +269,9 @@ void TaskDispatcher::WaitServantTask(cloud::DaemonService::Stub* stub, TaskDesc*
   const auto kRetries = 5;
 
   auto retries = kRetries;
-  while (retries-- && task_desc->aborted.load(std::memory_order_relaxed)) {
+  while (retries-- && !task_desc->aborted.load(std::memory_order_relaxed)) {
 	auto result = WaitServantTask(stub, task_desc->servant_task_id);
-    
+
 	// 失败
 	if (!result.first) {
       if (result.second == 1) { // rpc
@@ -265,8 +282,9 @@ void TaskDispatcher::WaitServantTask(cloud::DaemonService::Stub* stub, TaskDesc*
 	  } else if (result.second == 3) { // failed
         std::scoped_lock lock(task_desc->mutex);
 		task_desc->output.exit_code = -125;
+		break;
 	  } else {
-		DISTBU_CHECK(false, "不可达错误");
+		DISTBU_CHECK_FORMAT(false, "不可达错误");
 	  }
 	}
 
@@ -276,6 +294,7 @@ void TaskDispatcher::WaitServantTask(cloud::DaemonService::Stub* stub, TaskDesc*
 	}
 
 	std::scoped_lock lock(task_desc->mutex);
+	LOG_DEBUG("编译完成");
 	task_desc->output = *result.first;
 	break;
   }
@@ -285,30 +304,53 @@ std::pair<std::optional<DistTask::DistOutput>, int> TaskDispatcher::WaitServantT
     cloud::DaemonService::Stub* stub, std::uint64_t servant_task_id) {
   grpc::ClientContext    context;
   cloud::WaitForTaskRequest  req;
-  cloud::WaitForTaskResponse res;
+  cloud::WaitForTaskResponse resp;
+  cloud::WaitForTaskResponseChunk chunk;
+  std::string file;
 
   req.set_version(DISTRIBUILD_VERSION);
   req.set_token(config_keeper_.GetServingDaemonToken());
   req.set_task_id(servant_task_id);
   req.set_wait_ms(2s / 1ms);
   req.add_acceptable_compress_types(cloud::CompressType::COMPRESS_TYPE_ZSTD);
-  context.set_deadline(30s);
+  SetTimeout(&context, 30s);
 
-  auto status = stub->WaitForTask(&context, req, &res);
+  // 读取数据
+  auto reader = stub->WaitForTask(&context, req);
+  while (reader->Read(&chunk)) {
+	if (chunk.has_response()) {
+	  resp = chunk.response();
+	}
+	if (!chunk.file_chunk().empty()) {
+	  file.append(chunk.file_chunk().data(), chunk.file_chunk().size());
+	}
+  }
+
+  //读取完毕
+  grpc::Status status = reader->Finish();
   if (!status.ok()) {
-	LOG_WARN("RPC `WaitForTask` 调用失败");
+	LOG_WARN("RPC `WaitForTask` 调用失败：{}", status.error_message());
     return {std::nullopt, 1}; // 1: rpc error
   }
 
-  if (res.task_status() == cloud::TaskStatus::TASK_STATUS_RUNNING) {
+  if (resp.task_status() == cloud::TaskStatus::TASK_STATUS_RUNNING) {
 	return {std::nullopt, 2}; // 2: running error
-  } else if (res.task_status() == cloud::TaskStatus::TASK_STATUS_DONE) {
+  } else if (resp.task_status() == cloud::TaskStatus::TASK_STATUS_DONE) {
     DistTask::DistOutput output {
-      .exit_code = res.exit_code(),
-	  .std_out   = res.output(),
-	  .std_err   = res.err(),
-	  // TODO: 
+      .exit_code = resp.exit_code(),
+	  .std_out   = resp.output(),
+	  .std_err   = resp.err(),
+	  .extra_info = resp.extra_info(),
 	};
+	if (output.exit_code == 0) {
+	  auto files = TryUnpackFiles(file);
+	  if (!files) {
+		LOG_ERROR("TryUnpackFiles 失败");
+		return {std::nullopt, 3};
+	  }
+	  output.output_files = std::move(*files);
+	}
+	LOG_DEBUG("exit_code = {}, std out = {}, std err = {}", output.exit_code, output.std_out, output.std_err);
 	return {output, 0}; // 0: done
   } else {
 	return {std::nullopt, 3}; // 3: failed
@@ -328,7 +370,7 @@ void TaskDispatcher::FreeServantTask(cloud::DaemonService::Stub* stub, std::uint
 
 // ----------------------------------------------------------------------- //
 
-void TaskDispatcher::OnTimerTimeoutAbort() {
+void TaskDispatcher::OnTimerTimeoutAbort(Poco::Timer& timer) {
   std::size_t aborted = 0;
 
   {
@@ -347,38 +389,40 @@ void TaskDispatcher::OnTimerTimeoutAbort() {
   }
 }
 
-void TaskDispatcher::OnTimerKeepAlive() {
+void TaskDispatcher::OnTimerKeepAlive(Poco::Timer& timer) {
   auto now = std::chrono::steady_clock::now();
   std::vector<std::uint64_t> task_ids;
   grpc::ClientContext context;
   scheduler::KeepTaskAliveRequest  req;
-  scheduler::KeepTaskAliveResponse res;
+  scheduler::KeepTaskAliveResponse resp;
   
-  req.set_token("123456");
+  req.set_token(FLAGS_scheduler_token);
   {
 	std::scoped_lock lock1(tasks_mutex_);
-	for (auto&& [k, v] : tasks_) {
-	  std::scoped_lock lock2(v->mutex);
+	for (auto&& [k, task_desc] : tasks_) {
+	  std::scoped_lock lock2(task_desc->mutex);
 
       // 是否完成或未启动
-	  if (v->state == TaskDesc::State::Pending ||
-	      v->state == TaskDesc::State::Done) {
+	  if (task_desc->state == TaskDesc::State::Pending ||
+	      task_desc->state == TaskDesc::State::Done) {
 	    continue;
 	  }
       
 	  // 是否已被中止
-      if (v->aborted.load(std::memory_order_relaxed)) {
+      if (task_desc->aborted.load(std::memory_order_relaxed)) {
 		continue;
 	  }
 
       // 长时间未keep-alive
-	  if (now - v->last_keep_alive_tp > 1min) {
-		v->aborted.store(true, std::memory_order_relaxed);
+	  if (now - task_desc->last_keep_alive_tp > 1min) {
+		LOG_WARN("任务长时间未keep-alive，{}",task_desc->task_id);
+		task_desc->aborted.store(true, std::memory_order_relaxed);
+		continue;
 	  }
 
-	  // 
-	  req.add_task_grant_ids(v->task_grant_id);
-	  task_ids.push_back(v->task_id);
+	  // 添加
+	  req.add_task_grant_ids(task_desc->task_grant_id);
+	  task_ids.push_back(task_desc->task_id);
 	}
   }
   req.set_next_keep_alive_in_ms(10s / 1ms);
@@ -389,14 +433,14 @@ void TaskDispatcher::OnTimerKeepAlive() {
   }
 
   // rpc
-  context.set_deadline(now + 5s);
-  auto status = scheduler_stub_->KeepTaskAlive(&context, req, &res);
-  if (!status.ok() || res.statues_size() != req.task_grant_ids_size()) {
-	LOG_WARN("RPC调用KeepTaskAlive失败");
+  SetTimeout(&context, 5s);
+  auto status = scheduler_stub_->KeepTaskAlive(&context, req, &resp);
+  if (!status.ok() || resp.statues_size() != req.task_grant_ids_size()) {
+	LOG_WARN("RPC调用KeepTaskAlive失败：{}", status.error_message());
   } else {
     std::scoped_lock lock1(tasks_mutex_);
-	for (auto i = 0; i < task_ids.size(); ++i) {
-	  if (res.statues(i)) {
+	for (std::size_t i = 0; i < task_ids.size(); ++i) {
+	  if (resp.statues(i)) {
 		if (auto iter = tasks_.find(task_ids[i]); iter != tasks_.end()) {
           std::scoped_lock lock2(iter->second->mutex);
 		  iter->second->last_keep_alive_tp = now; // 更新alive时间
@@ -408,16 +452,15 @@ void TaskDispatcher::OnTimerKeepAlive() {
   }
 }
 
-void TaskDispatcher::OnTimerKilledAbort() {
+void TaskDispatcher::OnTimerKilledAbort(Poco::Timer& timer) {
   std::size_t aborted = 0;
 
   {
-	auto now = std::chrono::steady_clock::now();
 	std::scoped_lock lock(tasks_mutex_);
-	for (auto&& [_, v] : tasks_) {
-	  if (!v->aborted.load(std::memory_order_relaxed) &&
-	      IsProcAlive(v->task->GetRequesterPid())) { // 没有aborted但程序却不存在
-		v->aborted.store(true, std::memory_order_relaxed);
+	for (auto&& [_, task_desc] : tasks_) {
+	  if (!task_desc->aborted.load(std::memory_order_relaxed) &&
+	      !IsProcAlive(task_desc->task->GetRequesterPid())) { // 没有aborted但程序却不存在
+		task_desc->aborted.store(true, std::memory_order_relaxed);
 		++aborted;
 	  }
 	}
@@ -428,7 +471,7 @@ void TaskDispatcher::OnTimerKilledAbort() {
   }
 }
 
-void TaskDispatcher::OnTimerClear() {
+void TaskDispatcher::OnTimerClear(Poco::Timer& timer) {
   std::vector<std::shared_ptr<TaskDesc>> destroying;
   auto now = std::chrono::steady_clock::now();
 
@@ -445,14 +488,15 @@ void TaskDispatcher::OnTimerClear() {
 
       // 如果已经完成则删除
       if (iter->second->aborted.load(std::memory_order_relaxed)) {
+		LOG_DEBUG("任务已经完成，local task id = {}", iter->second->task_id);
 		destroying.push_back(std::move(iter->second));
 		iter = tasks_.erase(iter);
 		continue;
 	  }
 
-	  // 太长时间没有启动
+	  // 超时未启动
 	  if (iter->second->start_deadline + 1min < now) {
-		LOG_WARN("任务`{}`太长时间未启动", iter->second->task_id);
+		LOG_WARN("任务太长时间未启动, local task id = {}", iter->second->task_id);
         destroying.push_back(std::move(iter->second));
 		iter = tasks_.erase(iter);
 		continue;
@@ -462,7 +506,7 @@ void TaskDispatcher::OnTimerClear() {
 	}
   }
 
-  // 释放
+  // 析构自动释放
 }
 
 } // namespace distribuild::daemon::local

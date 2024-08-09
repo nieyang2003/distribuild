@@ -1,27 +1,24 @@
 #pragma once
-
-#include <string>
-#include <vector>
-#include <chrono>
-#include <functional>
+#include <Poco/Net/HTTPResponse.h>
+#include <json/json.h>
+#include <memory>
 
 namespace distribuild::client {
 
+/// @brief http响应
 struct DaemonResponse {
-  int status;
-  std::string body;
+  std::unique_ptr<Poco::Net::HTTPResponse> resp;
+  std::string body;        // 消息体
 };
 
-using DaemonCallHandler = std::function<DaemonResponse(const std::string&,
-	const std::vector<std::string>&,
-	const std::vector<std::string_view>&,
-	std::chrono::nanoseconds)>;
+/// @brief 发起分块数据格式http请求
+DaemonResponse DaemonHttpCall(const std::string& api, const std::vector<std::string_view>& chunks, const uint32_t timeout_seconds);
 
-void SetDaemonCallHandler(DaemonCallHandler handler);
+/// @brief 发起json格式http请求
+/// @param api 
+/// @param body 
+/// @param timeout_seconds 
+/// @return 
+DaemonResponse DaemonHttpCall(const std::string& api, const Json::Value& body, const uint32_t timeout_seconds);
 
-DaemonResponse DaemonCall(const std::string& api,
-    const std::vector<std::string>& headers,
-	const std::vector<std::string_view>& bodies,
-	std::chrono::nanoseconds timeout);
-
-}
+} // namespace distribuild::client

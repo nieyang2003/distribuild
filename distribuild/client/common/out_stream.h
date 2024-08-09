@@ -1,21 +1,21 @@
 #pragma once
-
 #include <string>
 #include <memory>
 #include <vector>
 #include <span>
-
-#include "zstd/lib/zstd.h"
-#include "BLAKE3/c/blake3.h"
+#include <zstd.h>
+#include <blake3.h>
 
 namespace distribuild::client {
 
+/// @brief 二进制数据流
 class OutStream {
 public:
     virtual ~OutStream() = default;
     virtual void Write(const char* data, std::size_t bytes) = 0;
 };
 
+/// @brief 简单存储数据的数据流
 class TransparentOutStream : public OutStream {
 public:
     void Write(const char* data, std::size_t bytes) override;
@@ -23,7 +23,7 @@ private:
     std::string m_buffer;
 };
 
-/// @brief 压缩源代码
+/// @brief zstd算法压缩源代码的数据流
 class ZstdOutStream : public OutStream {
  public:
   ZstdOutStream();
@@ -42,16 +42,18 @@ class ZstdOutStream : public OutStream {
   };
 
   std::unique_ptr<ZSTD_CCtx, decltype(&ZSTD_freeCCtx)> ctx_{ZSTD_createCCtx(), &ZSTD_freeCCtx};
-  std::vector<Chunk> chunks_;
+  std::vector<Chunk> chunks_{1}; // 至少一块
 };
 
 /// @brief 使用BLAKE3将输入流生成键值
 class Blake3OutStream : public OutStream {
  public:
   Blake3OutStream();
+
   void Write(const char* data, std::size_t bytes) override;
 
   std::string GetResult() const;
+
   void Finalize();
 
  private:

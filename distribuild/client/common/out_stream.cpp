@@ -1,6 +1,5 @@
-#include "out_stream.h"
-
-#include "distribuild/common/logging.h"
+#include "client/common/out_stream.h"
+#include "common/logging.h"
 
 namespace distribuild::client {
 
@@ -13,7 +12,7 @@ ZstdOutStream::ZstdOutStream() {
 }
 
 void ZstdOutStream::Write(const char* data, std::size_t bytes) {
-  ZSTD_inBuffer in_buf{.src = data, .size = bytes, .pos = 0};
+  ZSTD_inBuffer in_buf = {.src = data, .size = bytes, .pos = 0};
 
   while (in_buf.pos != in_buf.size) {
 	// 分配内存块
@@ -24,12 +23,12 @@ void ZstdOutStream::Write(const char* data, std::size_t bytes) {
     auto chunk_bytes_left = kChunkSize - chunks_.back().used;
 	ZSTD_outBuffer out_buf = {
 		.dst = chunks_.back().buffer.get() + chunks_.back().used,
-		.size = (kChunkSize - chunks_.back().used),
+		.size = chunk_bytes_left,
 		.pos = 0
 	};
 	//压缩
 	auto result = ZSTD_compressStream2(ctx_.get(), &out_buf, &in_buf, ZSTD_e_continue);
-	DISTBU_CHECK(!ZSTD_isError(result), "ZSTD压缩失败");
+	DISTBU_CHECK_FORMAT(!ZSTD_isError(result), "ZSTD压缩失败");
     // 更新块内存
 	chunks_.back().used += out_buf.pos;
   }
@@ -62,12 +61,12 @@ void ZstdOutStream::Flush() {
 	auto chunk_bytes_left = kChunkSize - chunks_.back().used;
 	ZSTD_outBuffer out_buf = {
 		.dst = chunks_.back().buffer.get() + chunks_.back().used,
-		.size = (kChunkSize - chunks_.back().used),
+		.size = chunk_bytes_left,
 		.pos = 0
 	};
 	// 重写压缩
 	auto result = ZSTD_compressStream2(ctx_.get(), &out_buf, &in_buf, ZSTD_e_end);
-	DISTBU_CHECK(!ZSTD_isError(result), "ZSTD压缩失败");
+	DISTBU_CHECK_FORMAT(!ZSTD_isError(result), "ZSTD压缩失败");
 	// 更新块内存
 	chunks_.back().used += out_buf.pos;
 
@@ -85,7 +84,7 @@ void Blake3OutStream::Write(const char* data, std::size_t bytes) {
 
 std::string Blake3OutStream::GetResult() const {
   std::string result;
-  for (int i = 0; i < sizeof(digest_); ++i) {
+  for (size_t i = 0; i < sizeof(digest_); ++i) {
 	char buf[8];
 	snprintf(buf, sizeof(buf), "%02x", digest_[i]);
     result += buf;
