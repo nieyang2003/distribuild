@@ -87,7 +87,7 @@ class TaskDispatcher {
 
   /// @brief 没有编译执行结果，则启动编译任务
   void PerformTask(std::shared_ptr<TaskDesc> task_desc);
-  
+
   /// @brief 尝试从缓存中读取结果
   bool TryReadCache(TaskDesc* task_desc);
 

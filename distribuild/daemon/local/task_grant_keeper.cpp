@@ -5,7 +5,7 @@
 #include <Poco/ThreadPool.h>
 #include <Poco/TaskManager.h>
 #include "daemon/local/task_grant_keeper.h"
-#include "common/logging.h"
+#include "common/spdlogging.h"
 #include "common/tools.h"
 #include "daemon/config.h"
 #include "daemon/version.h"
@@ -123,7 +123,7 @@ void TaskGrantKeeper::GrantFetcherProc(EnvGrantKeeper* keeper) {
     req.set_immeadiate_reqs(keeper->waiters);
     req.set_prefetch_reqs(1);
     req.set_min_version(DISTRIBUILD_VERSION);
-    
+
 	lock.unlock();
 	auto status = scheduler_stub_->WaitForStaringTask(&context, req, &resp); // 阻塞调用，不加锁
 	lock.lock();

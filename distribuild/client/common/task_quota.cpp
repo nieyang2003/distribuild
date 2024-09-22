@@ -1,10 +1,9 @@
 #include "client/common/task_quota.h"
 #include "client/common/daemon_call.h"
 #include "client/common/config.h"
-#include "common/logging.h"
+#include "common/spdlogging.h"
 #include <thread>
 #include <sstream>
-#include <fmt/format.h>
 #include <Poco/Net/HTTPClientSession.h>
 #include <Poco/Net/HTTPRequest.h>
 #include <Poco/Net/HTTPResponse.h>

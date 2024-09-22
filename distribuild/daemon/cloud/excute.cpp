@@ -1,7 +1,7 @@
 #include <sys/syscall.h>
 #include <unistd.h>
 #include "daemon/cloud/excute.h"
-#include "common/logging.h"
+#include "common/spdlogging.h"
 
 namespace distribuild::daemon::cloud {
 

@@ -19,7 +19,7 @@ enum class WaitStatus {
   Timeout = 2,
 };
 
-/// @brief 任务分配情况
+/// @brief 任务分配的id和节点地址
 struct TaskAllocation {
   std::uint64_t task_id;          // 任务id
   std::string   servant_location;  // ip:port

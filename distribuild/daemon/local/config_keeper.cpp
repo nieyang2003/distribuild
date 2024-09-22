@@ -3,7 +3,7 @@
 #include "daemon/config.h"
 #include <grpcpp/create_channel.h>
 #include "daemon/local/config_keeper.h"
-#include "common/logging.h"
+#include "common/spdlogging.h"
 
 namespace distribuild::daemon::local {
 

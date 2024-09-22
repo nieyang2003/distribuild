@@ -2,7 +2,7 @@
 #include <grpcpp/create_channel.h>
 #include <sys/stat.h>
 #include "daemon/local/task_dispatcher.h"
-#include "common/logging.h"
+#include "common/spdlogging.h"
 #include "common/tools.h"
 #include "daemon/local/cache_reader.h"
 #include "daemon/version.h"
@@ -159,7 +159,7 @@ bool TaskDispatcher::TryReadCache(TaskDesc* task_desc) {
   					 CacheReader::Instance()->TryRead(task_desc->task->CacheKey()) :
 					 std::nullopt;
   if (cache_entry) { // 命中缓存
-	auto files = TryUnpackFiles(cache_entry->files);
+	auto files = TryUnpackFiles(cache_entry->packed);
 	if (!files) return false;
 	task_desc->output = DistTask::DistOutput {
         .exit_code = 0,
@@ -179,7 +179,7 @@ bool TaskDispatcher::TryGetExistedResult(TaskDesc* task_desc) {
   if (!running_task) {
 	return false;
   }
-  
+
   // 创建grpc请求及相应
   auto stub = cloud::DaemonService::NewStub(grpc::CreateChannel(task_desc->servant_location, grpc::InsecureChannelCredentials()));
   grpc::ClientContext context;

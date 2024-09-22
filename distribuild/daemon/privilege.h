@@ -4,7 +4,7 @@
 #include <sys/resource.h>
 #include <unistd.h>
 #include <pwd.h>
-#include "common/logging.h"
+#include "common/spdlogging.h"
 
 namespace {
 

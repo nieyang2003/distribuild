@@ -5,7 +5,7 @@
 #include <gflags/gflags.h>
 #include "../build/distribuild/proto/scheduler.grpc.pb.h"
 #include "../build/distribuild/proto/scheduler.pb.h"
-#include "common/logging.h"
+#include "common/spdlogging.h"
 #include "daemon/version.h"
 #include "daemon/config.h"
 #include "daemon/cloud/executor.h"
@@ -204,7 +204,7 @@ grpc::Status DaemonServiceImpl::WaitForTask(grpc::ServerContext *context, const 
   	}
   	return grpc::Status(grpc::StatusCode::NOT_FOUND, "等待任务失败");
   }
-  
+
   // 获得输出
   auto task = static_cast<CompileTask*>(output.first.get());
   response->set_task_status(TaskStatus::TASK_STATUS_DONE);
@@ -218,14 +218,14 @@ grpc::Status DaemonServiceImpl::WaitForTask(grpc::ServerContext *context, const 
   WaitForTaskResponseChunk first_chunk;
   first_chunk.set_allocated_response(response);
   writer->Write(first_chunk);
-  
+
   // 发送文件
   auto&& file = task->GetFilePack();
   LOG_DEBUG("file size = {}", file.size());
   for (std::size_t i = 0; i < file.size(); i += FLAGS_chunk_size) {
 	WaitForTaskResponseChunk chunk;
 	size_t remaining_size = file.size() - i;
-    chunk.set_file_chunk(file.substr(i, std::min(FLAGS_chunk_size, remaining_size)));
+	chunk.set_file_chunk(file.data() + i, std::min(FLAGS_chunk_size, remaining_size));
     writer->Write(chunk);
   }
 

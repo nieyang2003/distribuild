@@ -3,6 +3,8 @@
 #include <stdarg.h>
 #include <sys/time.h>
 
+#if 0
+
 namespace distribuild {
 
 inline std::string GetNowTime() {
@@ -61,3 +63,5 @@ inline int min_log_level = 0;
     } while(0)
 
 #define DISTBU_CHECK(expr) DISTBU_CHECK_FORMAT(expr, "", "")
+
+#endif

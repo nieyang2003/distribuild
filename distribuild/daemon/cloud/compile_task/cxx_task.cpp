@@ -1,18 +1,45 @@
 #include <algorithm>
-#include "daemon/cloud/compile_task/cxx_task.h"
-#include "common/logging.h"
+#include <Poco/ThreadPool.h>
+#include <Poco/Task.h>
+#include "common/spdlogging.h"
 #include "common/encode.h"
 #include "common/dir.h"
 #include "common/crypto/blake3.h"
 #include "common/crypto/zstd.h"
-#include "daemon/cloud/compilers.h"
 #include "common/tools.h"
+#include "daemon/cloud/compile_task/cxx_task.h"
+#include "daemon/cloud/compilers.h"
+#include "daemon/cloud/cache_writer.h"
 #include "../build/distribuild/proto/file_desc.grpc.pb.h"
 #include "../build/distribuild/proto/file_desc.pb.h"
+#include "cxx_task.h"
 
 namespace distribuild::daemon::cloud {
 
 namespace {
+
+static constexpr std::string_view kRejectMacros[] = {"__TIME__", "__DATE__", "__TIMESTAMP__"};
+
+/// @brief 搜索源码中是否有时间相关宏，有则不能缓存
+class PrepareCachePocoTask : public Poco::Task {
+  std::promise<bool> promise_;
+  const std::string& source_;
+
+ public:
+   PrepareCachePocoTask(std::optional<std::future<bool>>& future, const std::string& source)
+     : Poco::Task("PrepareCachePocoTask")
+	 , source_(source) {
+     future = promise_.get_future();
+   }
+   virtual void runTask() override {
+     for (auto&& macro : kRejectMacros) {
+       if (std::search(source_.begin(), source_.end(), macro.begin(), macro.end()) != source_.end()) {
+         promise_.set_value(false);
+       }
+     }
+     promise_.set_value(true);
+   }
+};
 
 /// @brief 创建临时目录
 std::string MakeRelativeDir(const std::string& base_path, const std::string& dir_name) {
@@ -50,9 +77,11 @@ Locations FindPathLocations(const std::string& file, const std::string& prefix) 
   return locations;
 }
 
-}
+} // namespace
 
-CxxCompileTask::CxxCompileTask() : work_dir_(GetTempDir()) {
+CxxCompileTask::CxxCompileTask()
+  : task_manager_(Poco::ThreadPool::defaultPool())
+  , work_dir_(GetTempDir()) {
   LOG_DEBUG("工作目录：{}", work_dir_.GetPath());
 }
 
@@ -83,11 +112,21 @@ void CxxCompileTask::OnCompleted(int exit_code, std::string&& std_out, std::stri
   file_pack_ = PackFiles(files);
   LOG_DEBUG("打包后，file_pack_ size = {}, files size = {}", file_pack_.size(), files.size());
 
-  // TODO: 异步写入缓存
+  if (auto key = GetCacheKey(); key && exit_code == 0) {
+	LOG_DEBUG("写入缓存");
+	// 复制，不用担心写入析构，不需要string_view
+	// ! 复制太多
+	CacheEntry entry = {.exit_code  = exit_code_,
+	                    .std_out    = stdout_,
+						.std_err    = stderr_,
+						.extra_info = extra_info_,
+						.packed     = file_pack_ };
+	CacheWriter::Instance()->AsyncWrite(*key, std::move(entry));
+  }
 }
 
 std::optional<std::string> CxxCompileTask::GetCacheKey() const {
-  if (!write_cache_) {
+  if (!write_cache_future_ || write_cache_future_->get()) {
     return std::nullopt;
   }
   return fmt::format("distribuild-cxx-cache-{}",
@@ -100,7 +139,9 @@ std::string CxxCompileTask::GetDigest() const {
 }
 
 std::optional<CxxCompileTask::Output> CxxCompileTask::GetOutput(int exit_code, std::string& std_out, std::string& std_err) {
-//   write_cache_future_.wait(); // TODO: 等待写入缓存完成
+  if (write_cache_future_) {
+	write_cache_future_->wait();
+  }
 
   CxxCompileTask::Output result;
 
@@ -160,11 +201,22 @@ grpc::Status CxxCompileTask::Prepare(const QueueCxxTaskRequest& request, const s
   source_path_ = request.source_path();
   args_ = request.args();
   source_digest_ = EncodeHex(Blake3({source_}));
-  // TODO: 缓存
+  if (request.fill_cache()) {
+	PrepareCache();
+  }
   temp_sub_dir_ = MakeRelativeDir(work_dir_.GetPath(), source_digest_);
   cmdline_ = fmt::format("{} {} -o {}/{}/output.o", *compiler, args_, work_dir_.GetPath(), temp_sub_dir_);
 
   return grpc::Status::OK;
+}
+
+void CxxCompileTask::PrepareCache() {
+  if (std::all_of(std::begin(kRejectMacros), std::end(kRejectMacros), [&](auto&& macro) {
+    return args_.find(fmt::format("-D{}=", macro)) != std::string_view::npos;
+  })) {
+    return;
+  }
+  task_manager_.start(new PrepareCachePocoTask(write_cache_future_, source_));
 }
 
 } // distribuild::daemon::cloud

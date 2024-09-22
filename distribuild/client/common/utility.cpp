@@ -1,5 +1,5 @@
 #include "client/common/utility.h"
-#include "common/logging.h"
+#include "common/spdlogging.h"
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <cstring>

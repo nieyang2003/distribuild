@@ -3,7 +3,7 @@
 #include <grpcpp/grpcpp.h>
 #include <sstream>
 #include <optional>
-#include "common/logging.h"
+#include "common/spdlogging.h"
 
 using namespace std::literals;
 

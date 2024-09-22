@@ -1,5 +1,5 @@
 #include "client/common/out_stream.h"
-#include "common/logging.h"
+#include "common/spdlogging.h"
 
 namespace distribuild::client {
 

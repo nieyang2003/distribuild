@@ -1,4 +1,4 @@
-#include "common/logging.h"
+#include "common/spdlogging.h"
 #include "common/tools.h"
 #include "client/cxx/rewrite_file.h"
 #include "client/common/task_quota.h"
@@ -59,7 +59,7 @@ TryRewriteFileWithCommandLine(const CompilerArgs& args, const RewrittenArgs& cmd
 
 	return std::tuple(zstd_os.GetResult(), cache_cntl, cache_key);
   }
-  
+
   // 执行失败
   LOG_ERROR("\n{}", error);
   return std::nullopt;

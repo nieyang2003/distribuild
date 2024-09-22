@@ -1,5 +1,5 @@
 #include "scheduler/task_dispatcher.h"
-#include "common/logging.h"
+#include "common/spdlogging.h"
 #include "common/tools.h"
 #include <gflags/gflags.h>
 

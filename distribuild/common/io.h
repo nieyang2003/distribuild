@@ -6,7 +6,7 @@
 #include <fcntl.h>
 #include <poll.h>
 #include <algorithm>
-#include "common/logging.h"
+#include "common/spdlogging.h"
 
 namespace distribuild {
 

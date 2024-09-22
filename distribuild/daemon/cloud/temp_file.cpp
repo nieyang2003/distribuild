@@ -4,7 +4,7 @@
 #include <fstream>
 #include <sstream>
 #include "daemon/cloud/temp_file.h"
-#include "common/logging.h"
+#include "common/spdlogging.h"
 #include "common/io.h"
 
 using namespace std::literals;

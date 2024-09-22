@@ -3,7 +3,7 @@
 #include <functional>
 #include "daemon/config.h"
 #include "daemon/local/task_monitor.h"
-#include "common/logging.h"
+#include "common/spdlogging.h"
 #include "common/tools.h"
 
 namespace distribuild::daemon::local {

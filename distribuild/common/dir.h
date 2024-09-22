@@ -7,7 +7,7 @@
 #include <dirent.h>
 #include <sys/stat.h>
 #include <unistd.h>
-#include "common/logging.h"
+#include "common/spdlogging.h"
 
 namespace distribuild {
 

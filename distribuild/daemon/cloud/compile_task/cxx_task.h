@@ -1,6 +1,6 @@
 #pragma once
-
 #include <future>
+#include <Poco/TaskManager.h>
 #include "daemon/cloud/task.h"
 #include "daemon/cloud/temp_dir.h"
 #include "../build/distribuild/proto/daemon.grpc.pb.h"
@@ -42,14 +42,17 @@ class CxxCompileTask : public CompileTask {
   grpc::Status Prepare(const QueueCxxTaskRequest& request, const std::string& file);
 
  private:
+  void PrepareCache();
+
+ private:
   // 结果
   int exit_code_;
   std::string stdout_;
   std::string stderr_;
 
   // 缓存
-  bool write_cache_ = false;
-  std::future<bool> write_cache_future_;
+  mutable std::optional<std::future<bool>> write_cache_future_;
+  Poco::TaskManager task_manager_;
 
   // 源码信息
   EnviromentDesc env_desc_;

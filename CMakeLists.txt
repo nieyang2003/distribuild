@@ -36,7 +36,6 @@ SET(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin)
 # add_library(distribuild SHARED ${SRC_LIST})
 
 # 添加第三方库
-find_package(fmt REQUIRED)
 find_package(GTest REQUIRED)
 find_package(jsoncpp REQUIRED)
 find_package(OpenSSL REQUIRED)
@@ -47,6 +46,7 @@ find_package(Poco REQUIRED COMPONENTS Foundation Net Util)
 # find_package(Blake3 REQUIRED)
 find_package(gflags REQUIRED)
 find_package(Poco REQUIRED COMPONENTS Foundation)
+find_package(spdlog REQUIRED)
 
 add_subdirectory(distribuild)
 

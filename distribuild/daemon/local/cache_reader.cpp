@@ -2,7 +2,7 @@
 #include <grpcpp/grpcpp.h>
 #include <grpcpp/create_channel.h>
 #include <grpcpp/impl/codegen/time.h>
-#include "common/logging.h"
+#include "common/spdlogging.h"
 #include "common/tools.h"
 #include "daemon/local/cache_reader.h"
 #include "daemon/config.h"
@@ -18,7 +18,7 @@ CacheReader* CacheReader::Instance() {
 
 CacheReader::CacheReader()
   : timer_(0, 3'000) /* 3s */ {
-  if (true) {
+  if (FLAGS_cache_server_location.empty()) {
 	return;
   }
 
@@ -51,21 +51,36 @@ std::optional<CacheEntry> CacheReader::TryRead(const std::string& key) {
 	  return std::nullopt;
 	}
   }
-  
-  //可能命中，准备获取
+
+  // 可能存在，准备获取
   grpc::ClientContext context;
   cache::TryGetEntryRequest  req;
   grpc::CompletionQueue cq;
-  cache::TryGetEntryResponse resp;
-  
+
   SetTimeout(&context, 10s);
   req.set_token(FLAGS_cache_server_token);
   req.set_key(key);
+
+  std::string data;
+  cache::TryGetEntryResponseChunk chunk;
+  auto reader = stub_->TryGetEntry(&context, req);
+  while (reader->Read(&chunk)) {
+    data.append(chunk.file_chunk().data(), chunk.file_chunk().size());
+  }
+  grpc::Status status = reader->Finish();
+  if (!status.ok()) {
+	LOG_ERROR("读取缓存失败：{}", status.error_message());
+    return std::nullopt;
+  }
+
+  auto entry = TryParseCacheEntry(std::move(data));
+  if (!entry) {
+	LOG_ERROR("解析缓存数据失败");
+    return std::nullopt;
+  }
+  LOG_INFO("读取缓存成功");
   
-  auto status = stub_->AsyncTryGetEntry(&context, req, &cq);
-  // TODO: 异步操作
-  
-  return std::nullopt;
+  return entry;
 }
 
 void CacheReader::OnTimerLoadBloomFilter(Poco::Timer& timer) {
@@ -88,10 +103,10 @@ void CacheReader::OnTimerLoadBloomFilter(Poco::Timer& timer) {
 	  req.set_secs_last_full_fetch((now - last_bf_full_update_) / 1s);
 	}
   }
-  
+
   auto status = stub_->FetchBloomFilter(&context, req, &resp);
   if (!status.ok()) {
-	LOG_WARN("获取布隆过滤器失败：{}", status.error_details());
+	LOG_WARN("获取布隆过滤器失败：{}", status.error_message());
 	return;
   }
   last_bf_update_ = now;

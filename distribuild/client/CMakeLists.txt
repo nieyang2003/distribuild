@@ -6,8 +6,8 @@ add_library(lib_client STATIC ${SOURCES})
 add_executable(distribuild client.cpp)
 # 链接
 target_link_libraries(distribuild PRIVATE 
-	fmt::fmt
 	lib_client
+    spdlog::spdlog
 	JsonCpp::JsonCpp
 	zstd
 	blake3

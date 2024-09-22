@@ -49,7 +49,6 @@ int StartServer(int argc, char** argv) {
   (void)cloud::Executor::Instance();
   (void)local::TaskDispatcher::Instance();
   (void)local::CacheReader::Instance();
-  (void)local::CacheReader::Instance();
   (void)local::FileCache::Instance();
   (void)local::TaskMonitor::Instance();
 

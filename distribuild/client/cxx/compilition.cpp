@@ -1,5 +1,5 @@
 #include "client/cxx/compilition.h"
-#include "common/logging.h"
+#include "common/spdlogging.h"
 #include "common/multi_chunk.h"
 #include "common/crypto/zstd.h"
 #include "common/crypto/blake3.h"
@@ -7,7 +7,6 @@
 #include "client/common/daemon_call.h"
 #include "client/common/utility.h"
 #include <json/json.h>
-#include <fmt/format.h>
 #include <fstream>
 
 using namespace std::literals;
@@ -30,7 +29,7 @@ std::string GetFileDigest(const std::string_view& path) {
 
 } // namespace
 
-/// @brief 提交编译任务
+/// @brief 提交编译任务到云端
 /// @param args 
 /// @param rewritten_source 
 /// @return 

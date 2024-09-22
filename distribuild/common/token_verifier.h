@@ -1,9 +1,7 @@
-
 #pragma once
 #include <string>
 #include <unordered_set>
 #include <memory>
-#include "common/logging.h"
 #include "common/tools.h"
 
 namespace distribuild {

@@ -1,5 +1,5 @@
 #include "client/common/command.h"
-#include "common/logging.h"
+#include "common/spdlogging.h"
 #include "common/io.h"
 #include <sys/wait.h>
 #include <unistd.h>

@@ -13,7 +13,7 @@
 #include "daemon/local/task_dispatcher.h"
 #include "daemon/local/file_cache.h"
 #include "common/multi_chunk.h"
-#include "common/logging.h"
+#include "common/spdlogging.h"
 #include "../build/distribuild/proto/http_service.grpc.pb.h"
 #include "../build/distribuild/proto/http_service.pb.h"
 
@@ -75,7 +75,7 @@ void HttpServiceImpl::handleRequest(Poco::Net::HTTPServerRequest& request, Poco:
 	}
   }
 
-  LOG_TRACE("404 Not Found: {}", request.getURI());
+  spdlog::error("404 Not Found: {}", request.getURI());
   response.setStatus(Poco::Net::HTTPServerResponse::HTTP_NOT_FOUND);
   response.send() << "Distribuild: 404 Not Found";
 }
@@ -163,7 +163,7 @@ void HttpServiceImpl::SetFileDigest(Poco::Net::HTTPServerRequest& request,
   // 解析失败
   if (!status.ok()) {
 	response.setStatus(Poco::Net::HTTPResponse::HTTP_BAD_REQUEST);
-	LOG_DEBUG("解析请求失败：{}", status.message());
+	LOG_DEBUG("解析请求失败：{}", status.message().as_string());
 	response.send() << "解析请求失败";
   }
   // 解析成功，设置缓存

@@ -3,7 +3,7 @@
 #include <fstream>
 #include "daemon/cloud/compilers.h"
 #include "common/tools.h"
-#include "common/logging.h"
+#include "common/spdlogging.h"
 #include "daemon/config.h"
 #include "common/crypto/blake3.h"
 #include "common/encode.h"

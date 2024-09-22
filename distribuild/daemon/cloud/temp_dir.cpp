@@ -5,7 +5,7 @@
 #include <fcntl.h>
 #include <fstream>
 #include "daemon/cloud/temp_dir.h"
-#include "common/logging.h"
+#include "common/spdlogging.h"
 #include "common/dir.h"
 
 namespace distribuild::daemon::cloud {

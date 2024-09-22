@@ -1,4 +1,4 @@
-#include "common/logging.h"
+#include "common/spdlogging.h"
 #include "common/token_verifier.h"
 #include "scheduler/scheduler_service_impl.h"
 #include "scheduler/task_dispatcher.h"

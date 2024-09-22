@@ -5,7 +5,7 @@
 #include <Poco/ThreadPool.h>
 #include <Poco/TaskManager.h>
 #include "daemon/cloud/executor.h"
-#include "common/logging.h"
+#include "common/spdlogging.h"
 #include "daemon/sysinfo.h"
 #include "daemon/cloud/excute.h"
 #include "daemon/config.h"

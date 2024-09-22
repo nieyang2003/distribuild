@@ -1,5 +1,5 @@
 #include "daemon/local/dist_task/cxx_task.h"
-#include "common/logging.h"
+#include "common/spdlogging.h"
 #include "common/encode.h"
 #include "common/crypto/blake3.h"
 #include "daemon/local/file_cache.h"

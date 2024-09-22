@@ -1,5 +1,14 @@
 syntax = "proto3";
 package distribuild.cache;
+import "google/protobuf/any.proto";
+
+message CacheMeta {
+  int32 exit_code = 1; // 必须为0才存入，似乎可以省略，但int好像没必要
+  bytes stdout = 2;
+  bytes stderr = 3;
+  google.protobuf.Any extra_info = 4;
+  bytes files_check_hash = 5;
+}
 
 // ----------------- TryGetEntry ----------------- //
 
@@ -8,8 +17,8 @@ message TryGetEntryRequest {
   string key   = 1;
 }
 
-message TryGetEntryResponse {
-  // 如果命中，则放在元数据中返回
+message TryGetEntryResponseChunk {
+  bytes file_chunk = 1;
 }
 
 // ----------------- PutEntry ----------------- //
@@ -17,9 +26,13 @@ message TryGetEntryResponse {
 message PutEntryRequest {
   string token = 2;
   string key   = 1;
-  // 放在元数据中
 }
-  
+
+message PutEntryRequestChunk {
+  PutEntryRequest request = 1;
+  bytes file_chunk = 2;
+}
+
 message PutEntryResponse {
   // nothing
 }
@@ -48,9 +61,9 @@ message FetchBloomFilterResponse {
 
 service CacheService {
   // 获得缓存
-  rpc TryGetEntry(TryGetEntryRequest) returns (TryGetEntryResponse);
+  rpc TryGetEntry(TryGetEntryRequest) returns (stream TryGetEntryResponseChunk);
   // 获得缓存
-  rpc PutEntry(PutEntryRequest) returns (PutEntryResponse);
+  rpc PutEntry(stream PutEntryRequestChunk) returns (PutEntryResponse);
   // 向缓存服务器请求布隆过滤器内容
   rpc FetchBloomFilter(FetchBloomFilterRequest) returns (FetchBloomFilterResponse);
 }

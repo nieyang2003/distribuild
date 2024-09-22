@@ -1,7 +1,7 @@
 # 分布式编译系统
 ## 编译
-前提：
-C++20、fmt、JsonCpp、zstd、blake3、Poco、openssl、gflags、protobuf、grpc、gtest
+依赖：
+C++20、fmt、JsonCpp、zstd、blake3、Poco、openssl、gflags、protobuf、grpc、gtest、spdlog
 ...()
 ```
 mkdir build && cd build
@@ -33,3 +33,16 @@ TODO
 ## 相关项目
 [distcc](https://github.com/distcc/distcc)
 [yadcc](https://github.com/Tencent/yadcc)
+
+## 测试
+```
+# 6.10内核直接编译
+time make -j10
+Kernel: arch/x86/boot/bzImage is ready  (#1)
+
+real    2m56.014s
+user    19m23.799s
+sys     1m55.667s
+yang@DESKTOP-GALL135:~/tmp/linux-6.10.6$
+
+```

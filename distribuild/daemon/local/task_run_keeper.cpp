@@ -2,7 +2,7 @@
 #include <grpc/grpc.h>
 #include <grpcpp/grpcpp.h>
 #include <grpcpp/create_channel.h>
-#include "common/logging.h"
+#include "common/spdlogging.h"
 #include "daemon/config.h"
 
 using namespace std::literals;

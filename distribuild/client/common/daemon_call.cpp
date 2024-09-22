@@ -1,6 +1,6 @@
 #include "client/common/daemon_call.h"
 #include "client/common/config.h"
-#include "common/logging.h"
+#include "common/spdlogging.h"
 #include <Poco/Net/HTTPClientSession.h>
 #include <Poco/Net/HTTPRequest.h>
 #include <Poco/Exception.h>
